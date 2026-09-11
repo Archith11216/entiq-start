@@ -1805,7 +1805,7 @@ function CaseDetailDrawer({
   onDeleteCase?: (caseId: string) => void;
 }) {
   const [tab, setTab] = useState("Overview");
-  const [drawerWidthMode, setDrawerWidthMode] = useState<"compact" | "wide" | "expanded">("compact");
+  const [drawerWidthMode, setDrawerWidthMode] = useState<"compact" | "wide" | "expanded">("wide");
   const [currentCase, setCurrentCase] = useState<OnboardingCase>(c);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showInfoRequestModal, setShowInfoRequestModal] = useState(false);
@@ -1937,7 +1937,7 @@ function CaseDetailDrawer({
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/15 backdrop-blur-[0.5px]" onClick={onClose} />
-      <div className={`${drawerWidthMode === "compact" ? "w-[460px] max-w-[90vw]" : drawerWidthMode === "wide" ? "w-[700px] max-w-[95vw]" : "w-[95vw] max-w-[1200px]"} bg-card h-full flex flex-col shadow-2xl overflow-hidden transition-all duration-200`}>
+      <div className={`${drawerWidthMode === "compact" ? "w-[480px] max-w-[90vw]" : drawerWidthMode === "wide" ? "w-[720px] max-w-[95vw]" : "w-[95vw] max-w-[1200px]"} bg-card h-full flex flex-col shadow-2xl overflow-hidden transition-all duration-200`}>
         {/* Drawer header */}
         <div className="px-4.5 pt-3.5 pb-0 border-b border-border">
           <div className="flex items-start justify-between mb-3">
@@ -1971,8 +1971,8 @@ function CaseDetailDrawer({
                 <span>Delete</span>
               </button>
               <button
-                onClick={() => setDrawerWidthMode((w) => (w === "compact" ? "wide" : w === "wide" ? "expanded" : "compact"))}
-                title={drawerWidthMode === "compact" ? "Widen view (700px)" : drawerWidthMode === "wide" ? "Full-screen width (95vw)" : "Compact width (460px)"}
+                onClick={() => setDrawerWidthMode((w) => (w === "wide" ? "compact" : w === "compact" ? "expanded" : "wide"))}
+                title={drawerWidthMode === "wide" ? "Switch to Compact (480px)" : drawerWidthMode === "compact" ? "Switch to Full-screen width (95vw)" : "Switch to Standard Wide (720px)"}
                 className="flex items-center gap-1 px-2 py-0.8 text-[10.5px] font-medium border border-border rounded hover:bg-muted transition-colors text-muted-foreground"
               >
                 <Maximize2 size={11} />
@@ -2451,10 +2451,10 @@ function CaseDetailDrawer({
         {/* Drawer actions */}
         <div className="border-t border-border px-4 py-2.5 flex items-center gap-2">
           <button
-            onClick={() => setDrawerWidthMode((prev) => (prev === "compact" ? "wide" : "compact"))}
-            className="px-2.5 py-1.5 bg-[#2855A6] text-white text-[11.5px] font-semibold rounded hover:bg-[#1F4491] transition-colors"
+            onClick={() => setDrawerWidthMode((prev) => (prev === "wide" ? "compact" : "wide"))}
+            className="px-2.5 py-1.5 bg-[#EEF2FA] text-[#2855A6] text-[11.5px] font-semibold rounded hover:bg-[#2855A6]/15 border border-[#2855A6]/20 transition-colors"
           >
-            {drawerWidthMode === "compact" ? "Wider view" : "Compact view"}
+            {drawerWidthMode === "wide" ? "Compact view" : "Wider view"}
           </button>
           <button
             onClick={() => setShowAssignModal(true)}
