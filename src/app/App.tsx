@@ -3442,6 +3442,7 @@ function InvitationDetailDrawer({
   onClose: () => void;
   onUpdated?: () => void;
 }) {
+  const nav = useNavigation();
   const [tab, setTab] = useState("Overview");
   const [copied, setCopied] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -3453,6 +3454,36 @@ function InvitationDetailDrawer({
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const handleViewCase = async () => {
+    try {
+      showToast("Opening onboarding case...");
+      const allCases = await casesApi.getAll();
+      const matchingCase = allCases.find(
+        (c: OnboardingCase) =>
+          c.client.toLowerCase() === inv.client.toLowerCase() ||
+          (inv.email && c.client.toLowerCase().includes(inv.email.toLowerCase())) ||
+          c.id === inv.id.replace("INV-", "C-") ||
+          c.service === inv.service
+      ) || allCases[0];
+
+      if (matchingCase) {
+        onClose();
+        if (nav) {
+          nav.setActiveNav("cases");
+          setTimeout(() => {
+            nav.openCaseDetail?.(matchingCase);
+          }, 150);
+        }
+      } else {
+        if (nav) nav.setActiveNav("cases");
+        onClose();
+      }
+    } catch (e) {
+      if (nav) nav.setActiveNav("cases");
+      onClose();
+    }
   };
 
   const handleCopyLink = () => {
@@ -3683,10 +3714,11 @@ function InvitationDetailDrawer({
           )}
           {inv.status === "Completed" && (
             <button
-              onClick={() => showToast("Navigating to onboarding case...")}
-              className="px-4 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] transition-colors"
+              onClick={handleViewCase}
+              className="px-4 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] transition-colors flex items-center gap-1.5"
             >
-              View onboarding case
+              <FileText size={13} />
+              <span>View onboarding case</span>
             </button>
           )}
           <button
@@ -3696,14 +3728,14 @@ function InvitationDetailDrawer({
             {copied ? "Copied!" : "Copy link"}
           </button>
           <a
-            href={`/onboard?id=${inv.id}`}
+            href={`/onboard?id=${inv.id}&test=true`}
             target="_blank"
             rel="noreferrer"
-            className="px-3 py-2 border border-border text-[13px] font-semibold rounded hover:bg-muted text-foreground transition-colors inline-flex items-center gap-1.5"
-            title="Open client onboarding page in new tab"
+            className="px-3 py-2 border border-[#2855A6]/30 bg-[#EEF2FA] text-[#2855A6] text-[13px] font-semibold rounded hover:bg-[#2855A6]/20 transition-colors inline-flex items-center gap-1.5"
+            title="Test client onboarding intake flow in new tab"
           >
             <ExternalLink size={13} />
-            Test onboarding
+            <span>Test onboarding</span>
           </a>
           <div className="flex-1" />
           {canCancel && (

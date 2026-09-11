@@ -66,9 +66,13 @@ export function ClientOnboardingPortal({ invitationId }: ClientOnboardingPortalP
         const data = await invitationsApi.getPublic(invId);
         setInvitation(data);
         setSignatoryName(data.client || '');
-        if (data.status === 'Completed') {
+        const params = new URLSearchParams(window.location.search);
+        const isTestMode = params.has('test') || params.has('restart') || params.has('preview') || params.get('step') === '1';
+        if (data.status === 'Completed' && !isTestMode) {
           setStep(4);
           setAcceptedDate('Today');
+        } else {
+          setStep(1);
         }
       } catch (err: any) {
         console.error('Failed to load invitation:', err);
@@ -632,6 +636,17 @@ export function ClientOnboardingPortal({ invitationId }: ClientOnboardingPortalP
             </div>
 
             <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setStep(1);
+                  setAgreedTerms(false);
+                  setDrawnSignature(null);
+                }}
+                className="px-5 py-2.5 border border-[#2855A6]/30 bg-[#EEF2FA] text-[#2855A6] text-xs font-semibold rounded-lg hover:bg-[#2855A6]/20 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <RotateCcw size={14} /> Restart / Test from Step 1
+              </button>
               <button
                 type="button"
                 onClick={() => window.print()}
