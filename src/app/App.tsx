@@ -30,6 +30,7 @@ import {
   Plus,
   Filter,
   Download,
+  Printer,
   AlertTriangle,
   CheckCircle,
   Clock,
@@ -1406,6 +1407,392 @@ const INFO_REQUEST_PRESETS = [
   },
 ];
 
+// ─── Document Viewer Modal ───────────────────────────────────────────────────
+
+function DocumentViewerModal({
+  doc,
+  clientName,
+  entityName,
+  onClose,
+}: {
+  doc: { name: string; verified: boolean; source: string; date: string };
+  clientName: string;
+  entityName: string;
+  onClose: () => void;
+}) {
+  const isPassport = doc.name.toLowerCase().includes("passport") || doc.name.toLowerCase().includes("photo id");
+  const isTrustDeed = doc.name.toLowerCase().includes("trust") || doc.name.toLowerCase().includes("constitution");
+  const isAsic = doc.name.toLowerCase().includes("asic") || doc.name.toLowerCase().includes("extract");
+  const isEngagementLetter = doc.name.toLowerCase().includes("engagement") || doc.name.toLowerCase().includes("proposal") || doc.name.toLowerCase().includes("fee") || doc.name.toLowerCase().includes("terms");
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+      <div className="bg-card w-full max-w-[800px] max-h-[90vh] rounded-xl shadow-2xl flex flex-col overflow-hidden border border-border">
+        {/* Modal Header */}
+        <div className="px-5 py-3.5 border-b border-border bg-[#FAFAFA] flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-[#EEF2FA] text-[#2855A6] flex items-center justify-center shrink-0">
+              <FileText size={18} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-[14px] font-bold text-foreground leading-none">{doc.name}</h3>
+                <span className="px-2 py-0.5 rounded bg-[#E8F7EB] text-[#1E7A31] text-[10.5px] font-semibold flex items-center gap-1">
+                  <CheckCircle size={11} /> Verified Document
+                </span>
+              </div>
+              <div className="text-[11px] text-muted-foreground mt-1">
+                Source: <strong>{doc.source}</strong> · Verified: {doc.date} · SHA-256 Validated
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.print()}
+              className="px-2.5 py-1.5 border border-border rounded text-[11px] font-semibold text-foreground hover:bg-muted transition-colors flex items-center gap-1.5"
+            >
+              <Printer size={13} />
+              <span>Print</span>
+            </button>
+            <button
+              onClick={() => {
+                const element = document.createElement("a");
+                const file = new Blob([`EnTIQ Start Verified Document\n\nTitle: ${doc.name}\nClient: ${clientName}\nEntity: ${entityName}\nSource: ${doc.source}\nStatus: Verified\nDate: ${doc.date}\nVerification Hash: SHA256-${Math.random().toString(36).substring(2, 15)}`], { type: "text/plain" });
+                element.href = URL.createObjectURL(file);
+                element.download = `${doc.name.replace(/\s+/g, "_")}_Verified.txt`;
+                document.body.appendChild(element);
+                element.click();
+                document.body.removeChild(element);
+              }}
+              className="px-3 py-1.5 bg-[#2855A6] text-white rounded text-[11px] font-semibold hover:bg-[#1F4491] transition-colors flex items-center gap-1.5"
+            >
+              <Download size={13} />
+              <span>Download</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted transition-colors ml-1"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Document Content / Preview Viewport */}
+        <div className="flex-1 overflow-y-auto p-6 bg-[#F3F4F6]">
+          {isPassport ? (
+            /* Passport / Identity Preview */
+            <div className="bg-white border border-[#CBD5E1] rounded-xl shadow-lg p-6 max-w-[620px] mx-auto text-[#1E293B]">
+              <div className="flex items-center justify-between border-b pb-3 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-[#2855A6] text-white flex items-center justify-center font-bold text-[11px]">
+                    AUS
+                  </div>
+                  <div>
+                    <div className="text-[12px] font-bold uppercase tracking-wider text-[#2855A6]">Commonwealth of Australia</div>
+                    <div className="text-[15px] font-black tracking-tight">PASSPORT / PASSEPORT</div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] text-muted-foreground uppercase font-bold">Document No.</div>
+                  <div className="font-mono text-[14px] font-bold text-[#D0021B]">N8921044</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 mb-5">
+                {/* Photo box */}
+                <div className="col-span-1 bg-[#EEF2FA] border-2 border-dashed border-[#2855A6]/40 rounded-lg p-3 flex flex-col items-center justify-center text-center">
+                  <div className="w-20 h-24 rounded bg-[#CBD5E1] flex items-center justify-center text-[28px] font-bold text-[#64748B] mb-2 shadow-inner">
+                    {clientName.charAt(0) || "U"}
+                  </div>
+                  <span className="text-[10px] font-bold text-[#2855A6] bg-white px-2 py-0.5 rounded border border-[#2855A6]/20">
+                    3D BIOMETRIC MATCH
+                  </span>
+                </div>
+
+                {/* Passport Details */}
+                <div className="col-span-2 space-y-2 text-[11.5px]">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-[9.5px] uppercase text-muted-foreground font-semibold">Type / Type</div>
+                      <div className="font-bold">P</div>
+                    </div>
+                    <div>
+                      <div className="text-[9.5px] uppercase text-muted-foreground font-semibold">Country Code</div>
+                      <div className="font-bold">AUS</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9.5px] uppercase text-muted-foreground font-semibold">Surname / Nom</div>
+                    <div className="font-bold text-[13px]">{clientName.split(" ").slice(-1)[0]?.toUpperCase() || "SHARMA"}</div>
+                  </div>
+                  <div>
+                    <div className="text-[9.5px] uppercase text-muted-foreground font-semibold">Given Names / Prénoms</div>
+                    <div className="font-bold">{clientName.split(" ").slice(0, -1).join(" ") || clientName}</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-[9.5px] uppercase text-muted-foreground font-semibold">Nationality</div>
+                      <div className="font-bold">AUSTRALIAN</div>
+                    </div>
+                    <div>
+                      <div className="text-[9.5px] uppercase text-muted-foreground font-semibold">Date of Birth</div>
+                      <div className="font-bold">14 MAY 1982</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-[9.5px] uppercase text-muted-foreground font-semibold">Sex</div>
+                      <div className="font-bold">M</div>
+                    </div>
+                    <div>
+                      <div className="text-[9.5px] uppercase text-muted-foreground font-semibold">Expiry Date</div>
+                      <div className="font-bold text-[#1E7A31]">12 JUN 2031</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* MRZ Machine Readable Zone */}
+              <div className="bg-[#F8FAFC] border border-[#E2E8F0] p-3 rounded font-mono text-[11px] tracking-wider leading-relaxed text-[#334155] select-all">
+                P&lt;AUS{clientName.replace(/\s+/g, "&lt;").toUpperCase()}&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;<br />
+                N8921044&lt;4AUS8205148M3106124&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;02
+              </div>
+
+              {/* Verification Stamp */}
+              <div className="mt-4 pt-3 border-t flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-1.5 text-[#1E7A31] font-semibold">
+                  <CheckCircle size={14} /> NFC Chip Cryptographic Verification Passed
+                </div>
+                <div className="text-muted-foreground text-[10px]">
+                  EnTIQ KYC Biometric Audit #KYC-9812-OK
+                </div>
+              </div>
+            </div>
+          ) : isTrustDeed ? (
+            /* Trust Deed / Constitution Preview */
+            <div className="bg-white border border-[#CBD5E1] rounded-xl shadow-lg p-8 max-w-[620px] mx-auto text-[#1E293B] font-serif leading-relaxed">
+              <div className="text-center border-b pb-4 mb-6">
+                <div className="text-[11px] font-sans font-bold uppercase tracking-widest text-[#2855A6]">Official Legal Instrument</div>
+                <h2 className="text-[18px] font-bold text-[#0F172A] mt-1">DEED OF TRUST / CONSTITUTION</h2>
+                <div className="text-[12px] font-sans text-muted-foreground mt-1">DATED THIS 20TH DAY OF JULY 2026</div>
+              </div>
+
+              <div className="space-y-4 text-[12px] font-sans">
+                <div>
+                  <strong className="block text-[#0F172A] font-semibold">PARTIES:</strong>
+                  <p className="text-muted-foreground mt-0.5">
+                    <strong>1. SETTLOR:</strong> James Alexander Harrison<br />
+                    <strong>2. TRUSTEE:</strong> {entityName || "TechVentures Pty Ltd"}<br />
+                    <strong>3. PRIMARY BENEFICIARY:</strong> {clientName}
+                  </p>
+                </div>
+
+                <div className="border-t pt-3">
+                  <strong className="block text-[#0F172A] font-semibold">RECITALS &amp; POWERS:</strong>
+                  <p className="text-muted-foreground mt-0.5 text-justify leading-normal text-[11.5px]">
+                    The Settlor has transferred to the Trustee the initial sum of $100.00 to be held upon the trusts and subject to the powers and provisions contained in this Deed. The Trustee hereby consents to act as trustee of the Trust Fund with full discretionary powers of distribution and investment.
+                  </p>
+                </div>
+
+                <div className="bg-[#F8FAFC] border border-[#E2E8F0] p-3 rounded text-[11px]">
+                  <strong className="text-[#2855A6] block mb-1">SCHEDULE 1 (KEY PARTICULARS):</strong>
+                  <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                    <div>Trust Name: <strong className="text-foreground">{entityName} Family Trust</strong></div>
+                    <div>Vesting Date: <strong className="text-foreground">80th Anniversary</strong></div>
+                    <div>Governing Law: <strong className="text-foreground">State of Victoria, Australia</strong></div>
+                    <div>Stamp Duty: <strong className="text-foreground">Duly Stamped / Exempt</strong></div>
+                  </div>
+                </div>
+
+                <div className="border-t pt-3 flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span className="flex items-center gap-1 text-[#1E7A31] font-semibold font-sans">
+                    <CheckCircle size={13} /> Original Deed &amp; Schedule Verified
+                  </span>
+                  <span>Page 1 of 12 (Certified Copy)</span>
+                </div>
+              </div>
+            </div>
+          ) : isAsic ? (
+            /* ASIC Extract Preview */
+            <div className="bg-white border border-[#CBD5E1] rounded-xl shadow-lg p-6 max-w-[620px] mx-auto text-[#1E293B]">
+              <div className="border-b pb-3 mb-4 flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-[#2855A6]">Australian Securities &amp; Investments Commission</div>
+                  <h2 className="text-[16px] font-black text-[#0F172A] mt-0.5">CURRENT COMPANY EXTRACT</h2>
+                </div>
+                <div className="text-right font-mono text-[12px]">
+                  <span className="text-muted-foreground text-[10px] block font-sans">Extracted:</span>
+                  <strong>20/07/2026 14:22 AEST</strong>
+                </div>
+              </div>
+
+              <div className="space-y-4 text-[12px]">
+                <div className="grid grid-cols-2 gap-3 bg-[#F8FAFC] p-3 rounded border border-[#E2E8F0]">
+                  <div>
+                    <span className="text-[10.5px] text-muted-foreground block">Company Name:</span>
+                    <strong className="text-[13px]">{entityName || "TECHVENTURES PTY LTD"}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10.5px] text-muted-foreground block">ACN:</span>
+                    <strong className="font-mono text-[13px]">612 849 012</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10.5px] text-muted-foreground block">Registration Date:</span>
+                    <strong>15/03/2019</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10.5px] text-muted-foreground block">Status:</span>
+                    <span className="px-2 py-0.5 rounded bg-[#E8F7EB] text-[#1E7A31] font-bold text-[11px]">REGISTERED / ACTIVE</span>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5">Registered Office &amp; Principal Place</h4>
+                  <div className="p-2.5 border rounded text-[11.5px] text-muted-foreground">
+                    Level 4, 120 Collins Street, Melbourne VIC 3000 (Recorded 15/03/2019)
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5">Current Officeholders &amp; Directors</h4>
+                  <div className="border rounded overflow-hidden">
+                    <table className="w-full text-[11px]">
+                      <thead className="bg-[#F8FAFC] border-b text-muted-foreground">
+                        <tr>
+                          <th className="text-left p-2">Role</th>
+                          <th className="text-left p-2">Name</th>
+                          <th className="text-left p-2">Appointed</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b">
+                          <td className="p-2 font-medium">Director</td>
+                          <td className="p-2 font-bold text-foreground">{clientName}</td>
+                          <td className="p-2 text-muted-foreground">15/03/2019</td>
+                        </tr>
+                        <tr>
+                          <td className="p-2 font-medium">Secretary</td>
+                          <td className="p-2 font-bold text-foreground">{clientName}</td>
+                          <td className="p-2 text-muted-foreground">15/03/2019</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t flex items-center justify-between text-[11px]">
+                  <span className="text-[#1E7A31] font-semibold flex items-center gap-1">
+                    <CheckCircle size={13} /> ASIC Government Register Match Verified
+                  </span>
+                  <span className="text-muted-foreground font-mono text-[10px]">ASIC-REG-SYNC-2026</span>
+                </div>
+              </div>
+            </div>
+          ) : isEngagementLetter ? (
+            /* Letter of Engagement / Fee Proposal Preview */
+            <div className="bg-white border border-[#CBD5E1] rounded-xl shadow-lg p-8 max-w-[620px] mx-auto text-[#1E293B] font-sans leading-relaxed">
+              <div className="flex items-center justify-between border-b pb-4 mb-5">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-[#2855A6]">EnTIQ Start Accounting &amp; Advisory</div>
+                  <h2 className="text-[17px] font-black text-[#0F172A] mt-0.5">LETTER OF ENGAGEMENT</h2>
+                </div>
+                <div className="text-right text-[11px] text-muted-foreground">
+                  <div>Ref: <strong className="font-mono text-foreground">LOE-2026-ENG</strong></div>
+                  <div>Date: <strong>{doc.date || "20 Jul 2026"}</strong></div>
+                </div>
+              </div>
+
+              <div className="space-y-4 text-[12px]">
+                <div className="bg-[#F8FAFC] border border-[#E2E8F0] p-3 rounded">
+                  <div className="grid grid-cols-2 gap-2 text-[11.5px]">
+                    <div><span className="text-muted-foreground">Addressed To:</span> <strong className="text-foreground">{clientName}</strong></div>
+                    <div><span className="text-muted-foreground">Target Entity:</span> <strong className="text-foreground">{entityName || "Client Entity Pty Ltd"}</strong></div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-[#0F172A] mb-1 text-[12.5px]">1. Scope of Professional Services</h4>
+                  <ul className="list-disc pl-5 space-y-1 text-muted-foreground text-[11.5px]">
+                    <li>Preparation and electronic lodgement of annual Company / Individual Income Tax Returns.</li>
+                    <li>Preparation of Statutory Financial Statements in accordance with Australian Accounting Standards.</li>
+                    <li>Quarterly Business Activity Statement (BAS) preparation and ATO lodgement.</li>
+                    <li>General ongoing commercial tax compliance, corporate secretarial and advisory.</li>
+                  </ul>
+                </div>
+
+                <div className="border-t pt-3">
+                  <h4 className="font-bold text-[#0F172A] mb-1 text-[12.5px]">2. Agreed Professional Fee Structure</h4>
+                  <div className="p-3 bg-[#EEF2FA] rounded-lg border border-[#2855A6]/20 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-[#2855A6]">Annual Recurring Retainer</div>
+                      <div className="text-[11px] text-muted-foreground">Billed monthly in advance via direct debit mandate ($412.50 / mo)</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[16px] font-black text-[#2855A6]">$4,950.00</div>
+                      <div className="text-[10px] text-muted-foreground">per annum (incl. GST)</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t pt-3">
+                  <h4 className="font-bold text-[#0F172A] mb-2 text-[12.5px]">3. Digital Execution &amp; eSignature Audit</h4>
+                  <div className="border rounded-lg p-3 bg-[#F0FDF4] border-[#86EFAC] space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-[#1E7A31] font-bold flex items-center gap-1.5">
+                        <CheckCircle size={14} /> Digitally Signed via EnTIQ Documents &amp; eSign
+                      </span>
+                      <span className="text-[#1E7A31] font-mono text-[10.5px]">CERT-eSIGN-2026</span>
+                    </div>
+                    <div className="text-[10.5px] text-muted-foreground font-mono">
+                      Signatory: {clientName} &bull; Hash: SHA256-e8f92a104bce7193 &bull; Timestamp: {doc.date}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Generic Document Viewer */
+            <div className="bg-white border border-[#CBD5E1] rounded-xl shadow-lg p-8 max-w-[620px] mx-auto text-[#1E293B]">
+              <div className="border-b pb-4 mb-6 flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-[#2855A6]">Verified Case Attachment</div>
+                  <h2 className="text-[16px] font-bold text-[#0F172A] mt-0.5">{doc.name}</h2>
+                </div>
+                <span className="px-2.5 py-1 rounded bg-[#E8F7EB] text-[#1E7A31] text-[11px] font-bold">
+                  Verified
+                </span>
+              </div>
+              <div className="space-y-4 text-[12px] text-muted-foreground leading-relaxed">
+                <p>This document was securely uploaded and verified during the onboarding intake lifecycle for <strong>{clientName}</strong> ({entityName}).</p>
+                <div className="bg-[#F8FAFC] border p-4 rounded-lg space-y-2 text-[11.5px]">
+                  <div><strong>File Name:</strong> {doc.name}</div>
+                  <div><strong>Upload Source:</strong> {doc.source}</div>
+                  <div><strong>Verification Timestamp:</strong> {doc.date}</div>
+                  <div><strong>Integrity Checksum:</strong> <span className="font-mono text-[10.5px]">SHA256-d8f92a104bce7193...</span></div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="px-5 py-3 border-t border-border bg-card flex items-center justify-between text-[12px]">
+          <span className="text-muted-foreground text-[11px]">
+            Viewing 1 of 1 verified document files
+          </span>
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 bg-muted text-foreground rounded text-[11.5px] font-semibold hover:bg-muted/80 transition-colors"
+          >
+            Close Viewer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CaseDetailDrawer({
   c,
   onClose,
@@ -1424,6 +1811,7 @@ function CaseDetailDrawer({
   const [showInfoRequestModal, setShowInfoRequestModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [viewingDoc, setViewingDoc] = useState<{ name: string; verified: boolean; source: string; date: string } | null>(null);
   const [infoRequestEmail, setInfoRequestEmail] = useState("");
   const [infoRequestSubject, setInfoRequestSubject] = useState("");
   const [infoRequestText, setInfoRequestText] = useState("");
@@ -1890,24 +2278,51 @@ function CaseDetailDrawer({
 
               <div className="border border-border rounded-lg divide-y divide-border overflow-hidden">
                 {uploadedDocs.map((doc, i) => (
-                  <div key={i} className="flex items-center justify-between px-4 py-3 bg-card hover:bg-muted/40 transition-colors">
+                  <div
+                    key={i}
+                    onClick={() => setViewingDoc(doc)}
+                    className="flex items-center justify-between px-4 py-3 bg-card hover:bg-muted/40 transition-colors cursor-pointer group"
+                  >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded bg-[#EEF2FA] flex items-center justify-center text-[#2855A6]">
+                      <div className="w-8 h-8 rounded bg-[#EEF2FA] group-hover:bg-[#2855A6]/10 flex items-center justify-center text-[#2855A6] transition-colors">
                         <FileText size={16} />
                       </div>
                       <div>
-                        <div className="text-[13px] font-medium text-foreground">{doc.name}</div>
+                        <div className="text-[13px] font-medium text-foreground group-hover:text-[#2855A6] transition-colors flex items-center gap-1.5">
+                          {doc.name}
+                        </div>
                         <div className="text-[11px] text-muted-foreground">{doc.source} · {doc.date}</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <span className="text-[11px] font-semibold text-[#1E7A31] bg-[#E8F7EB] px-2 py-0.5 rounded flex items-center gap-1">
                         <CheckCircle size={11} /> Verified
                       </span>
                       <button
-                        onClick={() => showToast(`Downloading ${doc.name}...`)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingDoc(doc);
+                        }}
+                        className="px-2.5 py-1 bg-[#EEF2FA] text-[#2855A6] text-[11.5px] font-semibold rounded hover:bg-[#2855A6]/20 transition-colors flex items-center gap-1 shadow-2xs"
+                        title="View Document Preview"
+                      >
+                        <Eye size={12} />
+                        <span>View</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const element = document.createElement("a");
+                          const file = new Blob([`EnTIQ Start Verified Document\n\nTitle: ${doc.name}\nClient: ${currentCase.client}\nEntity: ${currentCase.entity}\nSource: ${doc.source}\nStatus: Verified\nDate: ${doc.date}\nVerification Hash: SHA256-${Math.random().toString(36).substring(2, 15)}`], { type: "text/plain" });
+                          element.href = URL.createObjectURL(file);
+                          element.download = `${doc.name.replace(/\s+/g, "_")}_Verified.txt`;
+                          document.body.appendChild(element);
+                          element.click();
+                          document.body.removeChild(element);
+                          showToast(`Downloaded ${doc.name}`);
+                        }}
                         className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted transition-colors"
-                        title="Download"
+                        title="Download Document"
                       >
                         <Download size={14} />
                       </button>
@@ -2248,6 +2663,15 @@ function CaseDetailDrawer({
             if (onDeleteCase) onDeleteCase(deletedId);
             onClose();
           }}
+        />
+      )}
+
+      {viewingDoc && (
+        <DocumentViewerModal
+          doc={viewingDoc}
+          clientName={currentCase.client}
+          entityName={currentCase.entity}
+          onClose={() => setViewingDoc(null)}
         />
       )}
     </div>
@@ -5988,6 +6412,7 @@ function EngagementFullPage({
     { name: "Letter of Engagement", date: currentEng.signed || "Pending", type: "PDF", signed: !!currentEng.signed },
     { name: "Fee Disclosure Statement", date: currentEng.signed || "Pending", type: "PDF", signed: !!currentEng.signed },
   ]);
+  const [viewingDoc, setViewingDoc] = useState<{ name: string; verified: boolean; source: string; date: string } | null>(null);
 
   const tabs = ["Overview", "Services", "Documents", "History", "Activity"];
 
@@ -6266,19 +6691,37 @@ function EngagementFullPage({
               </div>
               <div className="divide-y divide-border">
                 {docs.map((doc, i) => (
-                  <div key={i} className="flex items-center gap-4 px-5 py-3">
-                    <div className="w-8 h-8 rounded bg-[#FCE8EB] flex items-center justify-center shrink-0">
-                      <FileText size={13} className="text-[#D0021B]" />
+                  <div
+                    key={i}
+                    onClick={() => setViewingDoc({ name: doc.name, verified: !!doc.signed, source: "Engagement Vault", date: doc.date })}
+                    className="flex items-center gap-4 px-5 py-3 hover:bg-muted/40 transition-colors cursor-pointer group"
+                  >
+                    <div className="w-8 h-8 rounded bg-[#EEF2FA] group-hover:bg-[#2855A6]/10 flex items-center justify-center shrink-0 transition-colors">
+                      <FileText size={15} className="text-[#2855A6]" />
                     </div>
                     <div className="flex-1">
-                      <div className="text-[12px] font-semibold text-foreground">{doc.name}</div>
+                      <div className="text-[12px] font-semibold text-foreground group-hover:text-[#2855A6] transition-colors">{doc.name}</div>
                       <div className="text-[11px] text-muted-foreground">{doc.type} · {doc.date}</div>
                     </div>
                     {doc.signed
-                      ? <span className="text-[11px] font-semibold text-[#2EA843] flex items-center gap-1"><CheckCircle size={11} /> Signed</span>
-                      : <span className="text-[11px] font-semibold text-[#F5A623]">Awaiting signature</span>}
+                      ? <span className="text-[11px] font-semibold text-[#2EA843] bg-[#E8F7EB] px-2 py-0.5 rounded flex items-center gap-1"><CheckCircle size={11} /> Signed</span>
+                      : <span className="text-[11px] font-semibold text-[#F5A623] bg-[#FEF6E9] px-2 py-0.5 rounded">Awaiting signature</span>}
                     <button
-                      onClick={() => showToast(`Downloading ${doc.name}...`)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setViewingDoc({ name: doc.name, verified: !!doc.signed, source: "Engagement Vault", date: doc.date });
+                      }}
+                      className="px-2.5 py-1 bg-[#EEF2FA] text-[#2855A6] text-[11.5px] font-semibold rounded hover:bg-[#2855A6]/20 transition-colors flex items-center gap-1"
+                      title="View Document"
+                    >
+                      <Eye size={12} />
+                      <span>View</span>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        showToast(`Downloading ${doc.name}...`);
+                      }}
                       className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                       title="Download"
                     >
@@ -6380,6 +6823,15 @@ function EngagementFullPage({
           </div>
         </div>
       )}
+
+      {viewingDoc && (
+        <DocumentViewerModal
+          doc={viewingDoc}
+          clientName={currentEng.client}
+          entityName={currentEng.client}
+          onClose={() => setViewingDoc(null)}
+        />
+      )}
     </div>
   );
 }
@@ -6398,6 +6850,7 @@ function EngagementDetailDrawer({
   const [tab, setTab] = useState("Overview");
   const [currentEng, setCurrentEng] = useState<EngagementRow>(eng);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [viewingDoc, setViewingDoc] = useState<{ name: string; verified: boolean; source: string; date: string } | null>(null);
   const tabs = ["Overview", "Services", "Documents", "Activity"];
 
   const showToast = (msg: string) => {
@@ -6526,12 +6979,42 @@ function EngagementDetailDrawer({
 
           {tab === "Documents" && (
             <div className="space-y-3">
-              <div className="border border-border rounded-lg p-3 flex items-center justify-between text-[12px]">
-                <div className="flex items-center gap-2">
-                  <FileText size={16} className="text-[#2855A6]" />
-                  <span>Letter of Engagement ({currentEng.id}.pdf)</span>
+              <div
+                onClick={() => setViewingDoc({ name: `Letter of Engagement (${currentEng.id})`, verified: true, source: "EnTIQ eSign Vault", date: currentEng.signed || "20 Jul 2026" })}
+                className="border border-border rounded-lg p-3 flex items-center justify-between text-[12px] bg-card hover:bg-muted/40 transition-colors cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded bg-[#EEF2FA] group-hover:bg-[#2855A6]/10 flex items-center justify-center text-[#2855A6] transition-colors">
+                    <FileText size={15} />
+                  </div>
+                  <span className="font-medium text-foreground group-hover:text-[#2855A6] transition-colors">Letter of Engagement ({currentEng.id}.pdf)</span>
                 </div>
-                <button onClick={() => showToast("Downloading document...")} className="text-[#2855A6] font-semibold hover:underline">Download</button>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10.5px] font-semibold text-[#1E7A31] bg-[#E8F7EB] px-2 py-0.5 rounded flex items-center gap-1">
+                    <CheckCircle size={11} /> eSigned
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setViewingDoc({ name: `Letter of Engagement (${currentEng.id})`, verified: true, source: "EnTIQ eSign Vault", date: currentEng.signed || "20 Jul 2026" });
+                    }}
+                    className="px-2.5 py-1 bg-[#EEF2FA] text-[#2855A6] text-[11.5px] font-semibold rounded hover:bg-[#2855A6]/20 transition-colors flex items-center gap-1"
+                    title="View Document"
+                  >
+                    <Eye size={12} />
+                    <span>View</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      showToast("Downloading document...");
+                    }}
+                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    title="Download"
+                  >
+                    <Download size={13} />
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -6578,6 +7061,15 @@ function EngagementDetailDrawer({
           )}
         </div>
       </div>
+
+      {viewingDoc && (
+        <DocumentViewerModal
+          doc={viewingDoc}
+          clientName={currentEng.client}
+          entityName={currentEng.client}
+          onClose={() => setViewingDoc(null)}
+        />
+      )}
     </div>
   );
 }
