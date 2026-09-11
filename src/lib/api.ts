@@ -12,17 +12,40 @@ import type {
   AuthTokens,
   UserProfile,
   PaginatedResponse,
+  BillingSchedule,
+  Invoice,
+  Payment,
+  BillingStats,
+  ServiceItem,
+  FeeItem,
+  StaffMember,
+  WorkflowProcess,
+  ApiKeyItem,
+  EmailConfig,
+  EmailConfigUpdate,
+  TestEmailPayload,
+  EmailSendResult,
+  CaseInfoRequestPayload,
+  CaseInfoRequestResponse,
 } from "../types/api";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8000";
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 const API_PREFIX = "/api/v1";
 
-// ─── Token storage ────────────────────────────────────────────────────────────
+// ─── Token & API Key storage ───────────────────────────────────────────────────
 
 const TOKEN_KEY = "entiq_access_token";
 const REFRESH_KEY = "entiq_refresh_token";
+const API_KEY_STORAGE = "entiq_api_key";
+export const DEFAULT_MASTER_API_KEY = "entiq_live_sec_7f9c2d1b8e4a3f0";
+
+export const apiKeyStore = {
+  get: (): string => localStorage.getItem(API_KEY_STORAGE) || (import.meta.env.VITE_API_KEY as string | undefined) || DEFAULT_MASTER_API_KEY,
+  set: (key: string): void => localStorage.setItem(API_KEY_STORAGE, key),
+  clear: (): void => localStorage.removeItem(API_KEY_STORAGE),
+};
 
 export const tokenStore = {
   getAccess: () => localStorage.getItem(TOKEN_KEY),
@@ -125,6 +148,89 @@ const SEED_TEMPLATES: Template[] = [
   { id: "TPL-010", name: "Advisory Engagement", type: "Engagement", service: "Business Advisory", version: "v1", status: "Draft", updated: "28 Jul 2026", author: "J. Okafor" },
 ];
 
+const SEED_SCHEDULES: BillingSchedule[] = [
+  { id: "SCH-000", client: "Manoj Tech Solutions Pty Ltd", engagementId: "ENG-2024-0450", service: "Company Tax Return & Advisory", type: "Monthly", amount: 529.17, gst: true, nextDue: "1 Oct 2026", adviser: "J. Okafor", status: "Active", squareSubscriptionId: "sub_Mn9k4Lx" },
+  { id: "SCH-001", client: "Harrington, Sophie", engagementId: "ENG-2024-0439", service: "Individual Tax Return", type: "Annual", amount: 1650, gst: true, nextDue: "1 Jun 2025", adviser: "J. Okafor", status: "Active", squareSubscriptionId: "sub_Hq7k2Lm" },
+  { id: "SCH-002", client: "Harrington, Sophie", engagementId: "ENG-2024-0438", service: "Business Advisory", type: "Monthly", amount: 1100, gst: true, nextDue: "1 Aug 2024", adviser: "J. Okafor", status: "Active", squareSubscriptionId: "sub_Bb3f8Pn" },
+  { id: "SCH-003", client: "Greenbrook Unit Trust", engagementId: "ENG-2024-0441", service: "Trust Tax Return", type: "Annual", amount: 4400, gst: true, nextDue: "1 Jul 2025", adviser: "J. Okafor", status: "Active", squareSubscriptionId: "sub_Ty5m1Qr" },
+  { id: "SCH-004", client: "Greenbrook Unit Trust", engagementId: "ENG-2024-0441", service: "Business Advisory", type: "Monthly", amount: 1100, gst: true, nextDue: "1 Aug 2024", adviser: "J. Okafor", status: "Active", squareSubscriptionId: "sub_Vc9n4Ws" },
+  { id: "SCH-005", client: "Caldwell SMSF", engagementId: "ENG-2024-0440", service: "SMSF Administration", type: "Annual", amount: 3300, gst: true, nextDue: "1 May 2025", adviser: "S. Patel", status: "Active", squareSubscriptionId: "sub_Xd2p7Jt" },
+  { id: "SCH-006", client: "Caldwell SMSF", engagementId: "ENG-2024-0440", service: "BAS Preparation", type: "Quarterly", amount: 550, gst: true, nextDue: "28 Oct 2024", adviser: "S. Patel", status: "Active", squareSubscriptionId: "sub_Ze6q0Ku" },
+  { id: "SCH-007", client: "Apex Ventures Pty Ltd", engagementId: "ENG-2024-0430", service: "Company Tax Return", type: "Annual", amount: 3850, gst: true, nextDue: "—", adviser: "A. Brennan", status: "Paused", squareSubscriptionId: "" },
+  { id: "SCH-008", client: "The Marcelline Family Trust", engagementId: "ENG-2023-0391", service: "Trust Tax Return", type: "Job-based", amount: 4400, gst: true, nextDue: "On completion", adviser: "J. Okafor", status: "Active", squareSubscriptionId: "" },
+];
+
+const SEED_INVOICES: Invoice[] = [
+  { id: "INV-2024-0313", scheduleId: "SCH-000", client: "Manoj Tech Solutions Pty Ltd", service: "Company Tax Return & Advisory — Sept 2026", amount: 529.17, gst: 52.92, issued: "1 Sept 2026", due: "15 Sept 2026", status: "Paid", xeroStatus: "Synced", xeroInvoiceNo: "INV-0313", squareStatus: "Paid", squarePaymentId: "sqp_Mn9k4Lx" },
+  { id: "INV-2024-0312", scheduleId: "SCH-002", client: "Harrington, Sophie", service: "Business Advisory — July 2024", amount: 1100, gst: 110, issued: "1 Jul 2024", due: "15 Jul 2024", status: "Paid", xeroStatus: "Synced", xeroInvoiceNo: "INV-0312", squareStatus: "Paid", squarePaymentId: "sqp_Hq7k2Lm" },
+  { id: "INV-2024-0311", scheduleId: "SCH-004", client: "Greenbrook Unit Trust", service: "Business Advisory — July 2024", amount: 1100, gst: 110, issued: "1 Jul 2024", due: "15 Jul 2024", status: "Paid", xeroStatus: "Synced", xeroInvoiceNo: "INV-0311", squareStatus: "Paid", squarePaymentId: "sqp_Vc9n4Ws" },
+  { id: "INV-2024-0310", scheduleId: "SCH-002", client: "Harrington, Sophie", service: "Business Advisory — June 2024", amount: 1100, gst: 110, issued: "1 Jun 2024", due: "15 Jun 2024", status: "Paid", xeroStatus: "Synced", xeroInvoiceNo: "INV-0310", squareStatus: "Paid", squarePaymentId: "sqp_Mn1a5Fb" },
+  { id: "INV-2024-0309", scheduleId: "SCH-001", client: "Harrington, Sophie", service: "Individual Tax Return 2023–24", amount: 1650, gst: 165, issued: "2 Jun 2024", due: "16 Jun 2024", status: "Paid", xeroStatus: "Synced", xeroInvoiceNo: "INV-0309", squareStatus: "Paid", squarePaymentId: "sqp_Pk8b3Gc" },
+  { id: "INV-2024-0308", scheduleId: "SCH-005", client: "Caldwell SMSF", service: "SMSF Administration 2023–24", amount: 3300, gst: 330, issued: "14 Jul 2024", due: "28 Jul 2024", status: "Due", xeroStatus: "Synced", xeroInvoiceNo: "INV-0308", squareStatus: "Pending", squarePaymentId: "" },
+  { id: "INV-2024-0307", scheduleId: "SCH-006", client: "Caldwell SMSF", service: "BAS Preparation Q4 FY2024", amount: 550, gst: 55, issued: "28 Jun 2024", due: "12 Jul 2024", status: "Overdue", xeroStatus: "Synced", xeroInvoiceNo: "INV-0307", squareStatus: "Failed", squarePaymentId: "" },
+  { id: "INV-2024-0306", scheduleId: "SCH-003", client: "Greenbrook Unit Trust", service: "Trust Tax Return 2022–23", amount: 4400, gst: 440, issued: "18 Jul 2024", due: "1 Aug 2024", status: "Sent", xeroStatus: "Synced", xeroInvoiceNo: "INV-0306", squareStatus: "—", squarePaymentId: "" },
+  { id: "INV-2024-0305", scheduleId: "SCH-007", client: "Apex Ventures Pty Ltd", service: "Company Tax Return 2022–23", amount: 3850, gst: 385, issued: "—", due: "—", status: "Draft", xeroStatus: "Not synced", xeroInvoiceNo: "", squareStatus: "—", squarePaymentId: "" },
+];
+
+const SEED_PAYMENTS: Payment[] = [
+  { id: "PAY-000", invoiceId: "INV-2024-0313", client: "Manoj Tech Solutions Pty Ltd", amount: 582.09, method: "Visa •••• 8841", date: "4 Sept 2026", squareTxId: "sqp_Mn9k4Lx", xeroReconciled: true, status: "Settled" },
+  { id: "PAY-001", invoiceId: "INV-2024-0312", client: "Harrington, Sophie", amount: 1210, method: "Visa •••• 4242", date: "8 Jul 2024", squareTxId: "sqp_Hq7k2Lm", xeroReconciled: true, status: "Settled" },
+  { id: "PAY-002", invoiceId: "INV-2024-0311", client: "Greenbrook Unit Trust", amount: 1210, method: "Bank transfer", date: "10 Jul 2024", squareTxId: "sqp_Vc9n4Ws", xeroReconciled: true, status: "Settled" },
+  { id: "PAY-003", invoiceId: "INV-2024-0310", client: "Harrington, Sophie", amount: 1210, method: "Visa •••• 4242", date: "8 Jun 2024", squareTxId: "sqp_Mn1a5Fb", xeroReconciled: true, status: "Settled" },
+  { id: "PAY-004", invoiceId: "INV-2024-0309", client: "Harrington, Sophie", amount: 1815, method: "Visa •••• 4242", date: "10 Jun 2024", squareTxId: "sqp_Pk8b3Gc", xeroReconciled: true, status: "Settled" },
+  { id: "PAY-005", invoiceId: "INV-2024-0308", client: "Caldwell SMSF", amount: 3630, method: "Mastercard •••• 7701", date: "Processing", squareTxId: "", xeroReconciled: false, status: "Processing" },
+  { id: "PAY-006", invoiceId: "INV-2024-0307", client: "Caldwell SMSF", amount: 605, method: "Mastercard •••• 7701", date: "12 Jul 2024", squareTxId: "", xeroReconciled: false, status: "Failed" },
+];
+
+const SEED_SERVICES: ServiceItem[] = [
+  { id: "SVC-001", name: "Individual Tax Return", description: "Annual income tax return preparation and lodgement", entityTypes: ["Individual"], scope: "Includes one rental property, up to $20k investments", status: "Active" },
+  { id: "SVC-002", name: "Company Tax Return", description: "Corporate income tax return and financial statements", entityTypes: ["Company"], scope: "Standard small business — excludes R&D or transfer pricing", status: "Active" },
+  { id: "SVC-003", name: "Trust Tax Return", description: "Trust income tax return and distribution statements", entityTypes: ["Trust"], scope: "Discretionary and unit trusts", status: "Active" },
+  { id: "SVC-004", name: "SMSF Administration", description: "Full SMSF audit, compliance and tax return", entityTypes: ["SMSF"], scope: "Up to 4 members, standard investment strategy", status: "Active" },
+  { id: "SVC-005", name: "BAS Preparation", description: "Quarterly Business Activity Statement preparation", entityTypes: ["Company", "Partnership", "Trust"], scope: "GST, PAYG withholding, fuel tax credits", status: "Active" },
+  { id: "SVC-006", name: "Business Advisory", description: "Strategic financial advice and management reporting", entityTypes: ["Company", "Partnership"], scope: "Monthly meetings, management accounts, KPI dashboard", status: "Active" },
+  { id: "SVC-007", name: "Partnership Tax Return", description: "Partnership tax return and distribution schedule", entityTypes: ["Partnership"], scope: "Standard partnership — excludes foreign partners", status: "Active" },
+];
+
+const SEED_FEES: FeeItem[] = [
+  { id: "FEE-001", service: "Individual Tax Return", basis: "Fixed", amount: 1650, frequency: "Annual", gst: true, notes: "Base rate — complex returns quoted separately" },
+  { id: "FEE-002", service: "Company Tax Return", amount: 3850, basis: "Fixed", frequency: "Annual", gst: true, notes: "Turnover < $5M. Additional $550 per entity in group." },
+  { id: "FEE-003", service: "Trust Tax Return", amount: 4400, basis: "Fixed", frequency: "Annual", gst: true, notes: "Discretionary trust base rate" },
+  { id: "FEE-004", service: "SMSF Administration", amount: 3300, basis: "Fixed", frequency: "Annual", gst: true, notes: "Full admin + audit. Audit conducted by external auditor." },
+  { id: "FEE-005", service: "BAS Preparation", amount: 550, basis: "Fixed", frequency: "Quarterly", gst: true, notes: "Per quarter — IAS lodgement included" },
+  { id: "FEE-006", service: "Business Advisory", amount: 1100, basis: "Fixed", frequency: "Monthly", gst: true, notes: "Retainer. Additional project work at charge-out rate." },
+  { id: "FEE-007", service: "Partnership Tax Return", amount: 2750, basis: "Fixed", frequency: "Annual", gst: true, notes: "" },
+];
+
+const SEED_STAFF: StaffMember[] = [
+  { id: "STF-001", name: "James Okafor", role: "Partner", rate: 520, currency: "AUD", unit: "hour", email: "j.okafor@growadvisory.com.au", status: "Active" },
+  { id: "STF-002", name: "Amelia Brennan", role: "Senior Manager", rate: 380, currency: "AUD", unit: "hour", email: "a.brennan@growadvisory.com.au", status: "Active" },
+  { id: "STF-003", name: "Sanjay Patel", role: "Senior Accountant", rate: 280, currency: "AUD", unit: "hour", email: "s.patel@growadvisory.com.au", status: "Active" },
+  { id: "STF-004", name: "Chloe Richardson", role: "Accountant", rate: 195, currency: "AUD", unit: "hour", email: "c.richardson@growadvisory.com.au", status: "Active" },
+  { id: "STF-005", name: "Marcus Webb", role: "Graduate Accountant", rate: 130, currency: "AUD", unit: "hour", email: "m.webb@growadvisory.com.au", status: "Active" },
+  { id: "STF-006", name: "Linda Tran", role: "Practice Manager", rate: 165, currency: "AUD", unit: "hour", email: "l.tran@growadvisory.com.au", status: "Active" },
+];
+
+const SEED_WORKFLOWS: WorkflowProcess[] = [
+  {
+    id: "default-client-onboarding",
+    name: "Default Client Onboarding Flow",
+    description: "End-to-end automated client onboarding with KYC, Engagement Letter, and Square Direct Debit",
+    nodesJson: "[]",
+    edgesJson: "[]",
+    status: "Active",
+  },
+];
+
+const SEED_API_KEYS: ApiKeyItem[] = [
+  {
+    id: "key-master-001",
+    key: "entiq_live_sec_7f9c2d1b8e4a3f0",
+    name: "Master Practice API Key",
+    isActive: true,
+  },
+];
+
 function getStored<T>(key: string, seed: T): T {
   try {
     const raw = localStorage.getItem(`entiq_mock_${key}`);
@@ -192,9 +298,11 @@ async function apiFetch<T>(
   retry = true
 ): Promise<T> {
   const token = tokenStore.getAccess();
+  const apiKey = apiKeyStore.get();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
+    ...(apiKey ? { "X-API-Key": apiKey } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
@@ -278,9 +386,64 @@ function handleLocalFallback<T>(path: string, options: RequestInit): Promise<T> 
     } as unknown as T);
   }
 
+  // /cases/:id/status or /cases/:id PATCH
+  if (cleanPath.startsWith("/cases/") && (cleanPath.endsWith("/status") || method === "PATCH")) {
+    const id = cleanPath.replace("/cases/", "").replace("/status", "");
+    const body = JSON.parse((options.body as string) || "{}");
+    const status = body.status;
+    const list = getStored<OnboardingCase[]>("cases", SEED_CASES);
+    const updated = list.map((c) => (c.id === id ? { ...c, status, progress: status === "Accepted" ? 100 : c.progress } : c));
+    setStored("cases", updated);
+    if (status === "Accepted") {
+      const engList = getStored<Engagement[]>("engagements", SEED_ENGAGEMENTS);
+      const targetCase = list.find((c) => c.id === id);
+      if (targetCase && !engList.some((e) => e.client.toLowerCase() === targetCase.client.toLowerCase())) {
+        const now = new Date();
+        const nextYear = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+        const newEng: Engagement = {
+          id: `ENG-2024-0${Math.floor(Math.random() * 900 + 100)}`,
+          client: targetCase.client,
+          service: targetCase.service,
+          signed: `${now.getDate()} ${now.toLocaleString("en-AU", { month: "short", year: "numeric" })}`,
+          renewalDue: `${nextYear.getDate()} ${nextYear.toLocaleString("en-AU", { month: "short", year: "numeric" })}`,
+          fee: "$4,950 pa",
+          status: "Active",
+          adviser: targetCase.owner,
+        };
+        setStored("engagements", [newEng, ...engList]);
+      }
+    }
+    return Promise.resolve(updated.find((c) => c.id === id)! as unknown as T);
+  }
+
   // /cases/:id
   if (cleanPath.startsWith("/cases/")) {
+    if (cleanPath.endsWith("/request-info") && method === "POST") {
+      const payload: CaseInfoRequestPayload = JSON.parse((options.body as string) || "{}");
+      return Promise.resolve({
+        delivered: false,
+        message: `Information request simulated for ${payload.recipientEmail}`,
+        recipientEmail: payload.recipientEmail,
+        status: "simulated",
+        simulated: true,
+      } as unknown as T);
+    }
     const id = cleanPath.replace("/cases/", "");
+    if (method === "DELETE") {
+      const items = getStored<OnboardingCase[]>("cases", SEED_CASES);
+      const filtered = items.filter((c) => c.id !== id);
+      setStored("cases", filtered);
+      const alertList = getStored<ReviewAlert[]>("alerts", SEED_ALERTS);
+      setStored("alerts", alertList.filter((a) => a.case !== id));
+      return Promise.resolve(undefined as unknown as T);
+    }
+    if (method === "PUT") {
+      const body = JSON.parse((options.body as string) || "{}");
+      const items = getStored<OnboardingCase[]>("cases", SEED_CASES);
+      const updated = items.map((c) => (c.id === id ? { ...c, ...body, ...(body.status === "Accepted" ? { progress: 100 } : {}) } : c));
+      setStored("cases", updated);
+      return Promise.resolve(updated.find((c) => c.id === id)! as unknown as T);
+    }
     const items = getStored<OnboardingCase[]>("cases", SEED_CASES);
     const match = items.find((c) => c.id === id);
     if (!match) return Promise.reject(new ApiError("Case not found", "404"));
@@ -379,6 +542,25 @@ function handleLocalFallback<T>(path: string, options: RequestInit): Promise<T> 
       channel: newInv.channel,
       progress: 0,
     };
+    if (payload.additionalCompanies && (payload.clientType === "Company" || payload.clientType === "Trust")) {
+      payload.additionalCompanies.forEach((co, idx) => {
+        if (!co.name.trim()) return;
+        const addCase: OnboardingCase = {
+          id: `C-2024-0${Math.floor(Math.random() * 900 + 100 + idx)}`,
+          client: co.name.trim(),
+          entity: "Company",
+          service: payload.clientType === "Trust" ? "Company Tax + Advisory" : payload.service,
+          status: "Invited",
+          risk: "Low",
+          owner: newInv.owner,
+          created: newInv.sent,
+          due: newInv.expires,
+          channel: newInv.channel,
+          progress: 0,
+        };
+        casesArr.unshift(addCase);
+      });
+    }
     setStored("cases", [newCase, ...casesArr]);
 
     return Promise.resolve(newInv as unknown as T);
@@ -396,8 +578,130 @@ function handleLocalFallback<T>(path: string, options: RequestInit): Promise<T> 
     return Promise.resolve(stats as unknown as T);
   }
 
+  // /invitations/email-config
+  if (cleanPath === "/invitations/email-config") {
+    const defaultConfig: EmailConfig = {
+      smtpHost: "smtp.gmail.com",
+      smtpPort: 587,
+      smtpUser: "",
+      smtpPasswordSet: false,
+      smtpFromEmail: "",
+      smtpFromName: "Grow Advisory Group",
+      frontendUrl: "http://localhost:5173",
+      isConfigured: false,
+    };
+    if (method === "PUT") {
+      const payload: EmailConfigUpdate = JSON.parse(options.body as string || "{}");
+      const current = getStored<EmailConfig>("smtp_config", defaultConfig);
+      const updated: EmailConfig = {
+        ...current,
+        ...payload,
+        smtpPasswordSet: Boolean(payload.smtpPassword || current.smtpPasswordSet),
+        isConfigured: Boolean((payload.smtpUser || current.smtpUser) && (payload.smtpPassword || current.smtpPasswordSet)),
+      };
+      setStored("smtp_config", updated);
+      return Promise.resolve(updated as unknown as T);
+    }
+    const current = getStored<EmailConfig>("smtp_config", defaultConfig);
+    return Promise.resolve(current as unknown as T);
+  }
+
+  // /invitations/test-email
+  if (cleanPath === "/invitations/test-email" && method === "POST") {
+    const payload: TestEmailPayload = JSON.parse(options.body as string || "{}");
+    const result: EmailSendResult = {
+      status: "sent",
+      delivered: true,
+      message: `Test email simulated for ${payload.toEmail} (offline mode)`,
+      simulated: true,
+    };
+    return Promise.resolve(result as unknown as T);
+  }
+
+  // /invitations/public/:id/accept
+  if (cleanPath.startsWith("/invitations/public/") && cleanPath.endsWith("/accept") && method === "POST") {
+    const id = cleanPath.replace("/invitations/public/", "").replace("/accept", "");
+    const items = getStored<Invitation[]>("invitations", SEED_INVITATIONS);
+    const existing = items.find((i) => i.id === id);
+    if (existing) {
+      existing.status = "Completed";
+      setStored("invitations", items);
+    }
+    const casesArr = getStored<OnboardingCase[]>("cases", SEED_CASES);
+    const matchedCase = casesArr.find((c) => existing && c.client === existing.client);
+    if (matchedCase) {
+      matchedCase.status = "Accepted";
+      matchedCase.progress = 100;
+      setStored("cases", casesArr);
+    }
+    return Promise.resolve({ status: "ok", message: "Onboarding completed successfully" } as unknown as T);
+  }
+
+  // /invitations/public/:id
+  if (cleanPath.startsWith("/invitations/public/") && method === "GET") {
+    const id = cleanPath.replace("/invitations/public/", "");
+    const items = getStored<Invitation[]>("invitations", SEED_INVITATIONS);
+    const existing = items.find((i) => i.id === id);
+    if (!existing) return Promise.reject(new ApiError("Invitation not found", "404"));
+    if (existing.status === "Sent") {
+      existing.status = "Opened";
+      setStored("invitations", items);
+    }
+    return Promise.resolve(existing as unknown as T);
+  }
+
+  // /invitations/:id
+  if (cleanPath.startsWith("/invitations/") && !cleanPath.endsWith("/resend") && !cleanPath.endsWith("/cancel") && !cleanPath.endsWith("/stats") && !cleanPath.endsWith("/email-config") && !cleanPath.endsWith("/test-email")) {
+    const id = cleanPath.replace("/invitations/", "");
+    const items = getStored<Invitation[]>("invitations", SEED_INVITATIONS);
+    const existingIndex = items.findIndex((i) => i.id === id);
+
+    if (method === "DELETE") {
+      if (existingIndex !== -1) {
+        items.splice(existingIndex, 1);
+        setStored("invitations", items);
+      }
+      return Promise.resolve(undefined as unknown as T);
+    }
+
+    if (method === "PUT" || method === "PATCH") {
+      if (existingIndex === -1) {
+        return Promise.reject(new ApiError("Invitation not found", "404"));
+      }
+      const payload: Partial<Invitation> = JSON.parse(options.body as string || "{}");
+      const updated = { ...items[existingIndex], ...payload };
+      items[existingIndex] = updated;
+      setStored("invitations", items);
+      return Promise.resolve(updated as unknown as T);
+    }
+
+    if (existingIndex !== -1) {
+      return Promise.resolve(items[existingIndex] as unknown as T);
+    }
+  }
+
   // /clients
   if (cleanPath === "/clients") {
+    if (method === "POST") {
+      const payload: ClientEntity = JSON.parse(options.body as string || "{}");
+      const items = getStored<ClientEntity[]>("clients", SEED_CLIENTS);
+      const prefix = payload.type === "Individual" ? "P" : "E";
+      const newClient: ClientEntity = {
+        id: payload.id || `${prefix}-${Math.floor(Math.random() * 90000 + 10000)}`,
+        name: payload.name || "Unnamed Entity",
+        type: payload.type || "Company",
+        abn: payload.abn || "",
+        acn: payload.acn || "",
+        status: payload.status || "Active",
+        verified: payload.verified || "Document",
+        cases: payload.cases ?? 0,
+        engagements: payload.engagements ?? 0,
+        added: payload.added || "Today",
+      };
+      setStored("clients", [newClient, ...items]);
+      return Promise.resolve(newClient as unknown as T);
+    }
+
     let rawItems = getStored<ClientEntity[]>("clients", SEED_CLIENTS);
     let items = rawItems.map((c, i) => ({
       ...c,
@@ -417,6 +721,37 @@ function handleLocalFallback<T>(path: string, options: RequestInit): Promise<T> 
       pageSize: 50,
       hasMore: false,
     } as unknown as T);
+  }
+
+  // /clients/:id
+  if (cleanPath.startsWith("/clients/")) {
+    const id = cleanPath.replace("/clients/", "");
+    const items = getStored<ClientEntity[]>("clients", SEED_CLIENTS);
+    const existingIndex = items.findIndex((c) => c.id === id);
+
+    if (method === "DELETE") {
+      if (existingIndex !== -1) {
+        items.splice(existingIndex, 1);
+        setStored("clients", items);
+      }
+      return Promise.resolve(undefined as unknown as T);
+    }
+
+    if (method === "PUT" || method === "PATCH") {
+      if (existingIndex === -1) {
+        return Promise.reject(new ApiError("Client not found", "404"));
+      }
+      const payload: Partial<ClientEntity> = JSON.parse(options.body as string || "{}");
+      const updated = { ...items[existingIndex], ...payload };
+      items[existingIndex] = updated;
+      setStored("clients", items);
+      return Promise.resolve(updated as unknown as T);
+    }
+
+    if (existingIndex === -1) {
+      return Promise.reject(new ApiError("Client not found", "404"));
+    }
+    return Promise.resolve(items[existingIndex] as unknown as T);
   }
 
   // /engagements
@@ -459,6 +794,137 @@ function handleLocalFallback<T>(path: string, options: RequestInit): Promise<T> 
     } as unknown as T);
   }
 
+  // /invitations/:id/resend
+  if (cleanPath.startsWith("/invitations/") && cleanPath.endsWith("/resend") && method === "POST") {
+    const id = cleanPath.split("/")[2];
+    const list = getStored<Invitation[]>("invitations", SEED_INVITATIONS);
+    const updated = list.map((i) => (i.id === id ? { ...i, status: "Sent", expires: "14 Aug" } : i));
+    setStored("invitations", updated);
+    return Promise.resolve(undefined as unknown as T);
+  }
+
+  // /invitations/:id/cancel
+  if (cleanPath.startsWith("/invitations/") && cleanPath.endsWith("/cancel") && method === "POST") {
+    const id = cleanPath.split("/")[2];
+    const list = getStored<Invitation[]>("invitations", SEED_INVITATIONS);
+    const updated = list.map((i) => (i.id === id ? { ...i, status: "Cancelled" } : i));
+    setStored("invitations", updated);
+    return Promise.resolve(undefined as unknown as T);
+  }
+
+  // /clients POST
+  if (cleanPath === "/clients" && method === "POST") {
+    const client = JSON.parse((options.body as string) || "{}");
+    const list = getStored<ClientEntity[]>("clients", SEED_CLIENTS);
+    const fullClient: ClientEntity = {
+      id: client.id || `${client.type === "Individual" ? "P" : "E"}-${Math.floor(Math.random() * 90000 + 10000)}`,
+      name: client.name,
+      type: client.type,
+      abn: client.abn || "",
+      acn: client.acn || "",
+      verified: client.verified || "Document",
+      cases: client.cases ?? 1,
+      engagements: client.engagements ?? 1,
+      added: client.added || "Today",
+      status: client.status || "Active",
+    };
+    setStored("clients", [fullClient, ...list]);
+    return Promise.resolve(fullClient as unknown as T);
+  }
+
+  // /clients/batch POST
+  if (cleanPath === "/clients/batch" && method === "POST") {
+    const listPayload: ClientEntity[] = JSON.parse((options.body as string) || "[]");
+    const currentList = getStored<ClientEntity[]>("clients", SEED_CLIENTS);
+    const addedEntities: ClientEntity[] = listPayload.map((client, i) => ({
+      id: client.id || `${client.type === "Individual" ? "P" : "E"}-${Math.floor(Math.random() * 90000 + 10000 + i)}`,
+      name: client.name,
+      type: client.type,
+      abn: client.abn || "",
+      acn: client.acn || "",
+      verified: client.verified || "Document",
+      cases: client.cases ?? 1,
+      engagements: client.engagements ?? 1,
+      added: client.added || "Today",
+      status: client.status || "Active",
+    }));
+    setStored("clients", [...addedEntities, ...currentList]);
+    return Promise.resolve(addedEntities as unknown as T);
+  }
+
+  // /engagements POST
+  if (cleanPath === "/engagements" && method === "POST") {
+    const engagement = JSON.parse((options.body as string) || "{}");
+    const list = getStored<Engagement[]>("engagements", SEED_ENGAGEMENTS);
+    const fullEng: Engagement = {
+      id: engagement.id || `ENG-2024-0${Math.floor(Math.random() * 900 + 100)}`,
+      client: engagement.client,
+      service: engagement.service,
+      signed: engagement.signed || "Today",
+      renewalDue: engagement.renewalDue || "",
+      fee: engagement.fee || "$0 pa",
+      status: engagement.status || "Active",
+      adviser: engagement.adviser || "J. Okafor",
+    };
+    setStored("engagements", [fullEng, ...list]);
+    return Promise.resolve(fullEng as unknown as T);
+  }
+
+  // /engagements/:id/status
+  if (cleanPath.startsWith("/engagements/") && (cleanPath.endsWith("/status") || method === "PATCH")) {
+    const id = cleanPath.split("/")[2];
+    const body = JSON.parse((options.body as string) || "{}");
+    const status = body.status;
+    const list = getStored<Engagement[]>("engagements", SEED_ENGAGEMENTS);
+    setStored("engagements", list.map((e) => (e.id === id ? { ...e, status } : e)));
+    return Promise.resolve(list.find((e) => e.id === id)! as unknown as T);
+  }
+
+  // /engagements/:id
+  if (cleanPath.startsWith("/engagements/") && !cleanPath.endsWith("/status")) {
+    const id = cleanPath.replace("/engagements/", "");
+    const items = getStored<Engagement[]>("engagements", SEED_ENGAGEMENTS);
+    const existingIndex = items.findIndex((e) => e.id === id);
+
+    if (method === "DELETE") {
+      if (existingIndex !== -1) {
+        items.splice(existingIndex, 1);
+        setStored("engagements", items);
+      }
+      return Promise.resolve(undefined as unknown as T);
+    }
+
+    if (method === "PUT") {
+      if (existingIndex === -1) {
+        return Promise.reject(new ApiError("Engagement not found", "404"));
+      }
+      const payload: Partial<Engagement> = JSON.parse(options.body as string || "{}");
+      const updated = { ...items[existingIndex], ...payload };
+      items[existingIndex] = updated;
+      setStored("engagements", items);
+      return Promise.resolve(updated as unknown as T);
+    }
+
+    if (existingIndex !== -1) {
+      return Promise.resolve(items[existingIndex] as unknown as T);
+    }
+  }
+
+  // /activity POST
+  if (cleanPath === "/activity" && method === "POST") {
+    const event = JSON.parse((options.body as string) || "{}");
+    const list = getStored<ActivityEvent[]>("activity", SEED_ACTIVITY);
+    const now = new Date();
+    const newEv: ActivityEvent = {
+      ...event,
+      id: Date.now(),
+      createdAt: event.createdAt || now.toISOString(),
+      time: event.time || "Just now",
+    };
+    setStored("activity", [newEv, ...list]);
+    return Promise.resolve(newEv as unknown as T);
+  }
+
   // /templates
   if (cleanPath === "/templates") {
     let items = getStored<Template[]>("templates", SEED_TEMPLATES);
@@ -473,6 +939,439 @@ function handleLocalFallback<T>(path: string, options: RequestInit): Promise<T> 
       pageSize: 50,
       hasMore: false,
     } as unknown as T);
+  }
+
+  // /billing/stats
+  if (cleanPath === "/billing/stats") {
+    const schedules = getStored<BillingSchedule[]>("schedules", SEED_SCHEDULES);
+    const invoices = getStored<Invoice[]>("invoices", SEED_INVOICES);
+    const payments = getStored<Payment[]>("payments", SEED_PAYMENTS);
+    const active_schedules = schedules.filter((s) => s.status === "Active").length;
+    const overdue_count = invoices.filter((i) => i.status === "Overdue").length;
+    const settled_payments = payments.filter((p) => p.status === "Settled");
+    const total_revenue_ytd = settled_payments.reduce((sum, p) => sum + p.amount, 0);
+    const collected_this_month = settled_payments.slice(0, 4).reduce((sum, p) => sum + p.amount, 0);
+    const outstanding = invoices
+      .filter((i) => ["Due", "Overdue", "Sent"].includes(i.status))
+      .reduce((sum, i) => sum + (i.amount + i.gst), 0);
+
+    const stats: BillingStats = {
+      totalRevenueYtd: Math.round(total_revenue_ytd * 100) / 100,
+      collectedThisMonth: Math.round(collected_this_month * 100) / 100,
+      outstandingInvoices: Math.round(outstanding * 100) / 100,
+      activeSchedules: active_schedules,
+      overdueCount: overdue_count,
+      settledPaymentsCount: settled_payments.length,
+    };
+    return Promise.resolve(stats as unknown as T);
+  }
+
+  // /billing/schedules
+  if (cleanPath === "/billing/schedules") {
+    let items = getStored<BillingSchedule[]>("schedules", SEED_SCHEDULES);
+    if (method === "POST") {
+      const payload: Partial<BillingSchedule> = JSON.parse(options.body as string || "{}");
+      const newSch: BillingSchedule = {
+        id: payload.id || `SCH-${Math.floor(Math.random() * 900 + 100)}`,
+        client: payload.client || "Client",
+        engagementId: payload.engagementId || "",
+        service: payload.service || "Tax Service",
+        type: payload.type || "Monthly",
+        amount: payload.amount || 0,
+        gst: payload.gst !== undefined ? payload.gst : true,
+        nextDue: payload.nextDue || "1st Next Month",
+        adviser: payload.adviser || "J. Okafor",
+        status: payload.status || "Active",
+        squareSubscriptionId: payload.squareSubscriptionId || `sub_${Math.floor(Math.random() * 90000 + 10000)}`,
+      };
+      setStored("schedules", [newSch, ...items]);
+      return Promise.resolve(newSch as unknown as T);
+    }
+    const client = qs.get("client")?.toLowerCase();
+    const status = qs.get("status");
+    if (client) items = items.filter((s) => s.client.toLowerCase().includes(client));
+    if (status && status !== "All") items = items.filter((s) => s.status === status);
+    return Promise.resolve({
+      items,
+      total: items.length,
+      page: 1,
+      pageSize: 50,
+      hasMore: false,
+    } as unknown as T);
+  }
+
+  // /billing/schedules/:id
+  if (cleanPath.startsWith("/billing/schedules/")) {
+    const id = cleanPath.replace("/billing/schedules/", "");
+    const items = getStored<BillingSchedule[]>("schedules", SEED_SCHEDULES);
+    const idx = items.findIndex((s) => s.id === id);
+
+    if (method === "DELETE") {
+      if (idx !== -1) {
+        items.splice(idx, 1);
+        setStored("schedules", items);
+      }
+      return Promise.resolve(undefined as unknown as T);
+    }
+
+    if (method === "PUT" || method === "PATCH") {
+      if (idx === -1) return Promise.reject(new ApiError("Schedule not found", "404"));
+      const payload = JSON.parse(options.body as string || "{}");
+      const updated = { ...items[idx], ...payload };
+      items[idx] = updated;
+      setStored("schedules", items);
+      return Promise.resolve(updated as unknown as T);
+    }
+  }
+
+  // /billing/invoices
+  if (cleanPath === "/billing/invoices") {
+    let items = getStored<Invoice[]>("invoices", SEED_INVOICES);
+    if (method === "POST") {
+      const payload: Partial<Invoice> = JSON.parse(options.body as string || "{}");
+      const newInv: Invoice = {
+        id: payload.id || `INV-2024-${Math.floor(Math.random() * 900 + 100)}`,
+        scheduleId: payload.scheduleId || "",
+        client: payload.client || "Client",
+        service: payload.service || "Service",
+        amount: payload.amount || 0,
+        gst: payload.gst ?? Math.round((payload.amount || 0) * 0.1 * 100) / 100,
+        issued: payload.issued || "Today",
+        due: payload.due || "In 14 days",
+        status: payload.status || "Draft",
+        xeroStatus: payload.xeroStatus || "Synced",
+        xeroInvoiceNo: payload.xeroInvoiceNo || `INV-${Math.floor(Math.random() * 9000 + 1000)}`,
+        squareStatus: payload.squareStatus || "—",
+        squarePaymentId: payload.squarePaymentId || "",
+      };
+      setStored("invoices", [newInv, ...items]);
+      return Promise.resolve(newInv as unknown as T);
+    }
+    const client = qs.get("client")?.toLowerCase();
+    const status = qs.get("status");
+    if (client) items = items.filter((i) => i.client.toLowerCase().includes(client));
+    if (status && status !== "All") items = items.filter((i) => i.status === status);
+    return Promise.resolve({
+      items,
+      total: items.length,
+      page: 1,
+      pageSize: 50,
+      hasMore: false,
+    } as unknown as T);
+  }
+
+  // /billing/invoices/:id/status
+  if (cleanPath.startsWith("/billing/invoices/") && cleanPath.endsWith("/status")) {
+    const id = cleanPath.split("/")[3];
+    const newStatus = qs.get("new_status") || "Paid";
+    const items = getStored<Invoice[]>("invoices", SEED_INVOICES);
+    const updated = items.map((inv) =>
+      inv.id === id ? { ...inv, status: newStatus as any, squareStatus: newStatus === "Paid" ? "Paid" : inv.squareStatus } : inv
+    );
+    setStored("invoices", updated);
+    return Promise.resolve(updated.find((i) => i.id === id)! as unknown as T);
+  }
+
+  // /billing/invoices/:id
+  if (cleanPath.startsWith("/billing/invoices/") && !cleanPath.endsWith("/status")) {
+    const id = cleanPath.replace("/billing/invoices/", "");
+    const items = getStored<Invoice[]>("invoices", SEED_INVOICES);
+    const existingIndex = items.findIndex((i) => i.id === id);
+
+    if (method === "DELETE") {
+      if (existingIndex !== -1) {
+        items.splice(existingIndex, 1);
+        setStored("invoices", items);
+      }
+      return Promise.resolve(undefined as unknown as T);
+    }
+
+    if (method === "PUT" || method === "PATCH") {
+      if (existingIndex === -1) {
+        return Promise.reject(new ApiError("Invoice not found", "404"));
+      }
+      const payload: Partial<Invoice> = JSON.parse(options.body as string || "{}");
+      const updated = { ...items[existingIndex], ...payload };
+      items[existingIndex] = updated;
+      setStored("invoices", items);
+      return Promise.resolve(updated as unknown as T);
+    }
+
+    if (existingIndex !== -1) {
+      return Promise.resolve(items[existingIndex] as unknown as T);
+    }
+  }
+
+  // /billing/payments
+  if (cleanPath === "/billing/payments") {
+    let items = getStored<Payment[]>("payments", SEED_PAYMENTS);
+    if (method === "POST") {
+      const payload: Partial<Payment> = JSON.parse(options.body as string || "{}");
+      const newPay: Payment = {
+        id: payload.id || `PAY-${Math.floor(Math.random() * 900 + 100)}`,
+        invoiceId: payload.invoiceId || "",
+        client: payload.client || "Client",
+        amount: payload.amount || 0,
+        method: payload.method || "Credit Card",
+        date: payload.date || "Today",
+        squareTxId: payload.squareTxId || `sqp_${Math.floor(Math.random() * 90000 + 10000)}`,
+        xeroReconciled: payload.xeroReconciled !== undefined ? payload.xeroReconciled : true,
+        status: payload.status || "Settled",
+      };
+      setStored("payments", [newPay, ...items]);
+      if (payload.invoiceId) {
+        const invs = getStored<Invoice[]>("invoices", SEED_INVOICES);
+        setStored("invoices", invs.map((i) => i.id === payload.invoiceId ? { ...i, status: "Paid", squareStatus: "Paid", squarePaymentId: newPay.squareTxId } : i));
+      }
+      return Promise.resolve(newPay as unknown as T);
+    }
+    const client = qs.get("client")?.toLowerCase();
+    const status = qs.get("status");
+    if (client) items = items.filter((p) => p.client.toLowerCase().includes(client));
+    if (status && status !== "All") items = items.filter((p) => p.status === status);
+    return Promise.resolve({
+      items,
+      total: items.length,
+      page: 1,
+      pageSize: 50,
+      hasMore: false,
+    } as unknown as T);
+  }
+
+  // /billing/payments/:id
+  if (cleanPath.startsWith("/billing/payments/")) {
+    const id = cleanPath.replace("/billing/payments/", "");
+    const items = getStored<Payment[]>("payments", SEED_PAYMENTS);
+    const existingIndex = items.findIndex((p) => p.id === id);
+
+    if (method === "DELETE") {
+      if (existingIndex !== -1) {
+        items.splice(existingIndex, 1);
+        setStored("payments", items);
+      }
+      return Promise.resolve(undefined as unknown as T);
+    }
+
+    if (method === "PUT" || method === "PATCH") {
+      if (existingIndex === -1) {
+        return Promise.reject(new ApiError("Payment not found", "404"));
+      }
+      const payload: Partial<Payment> = JSON.parse(options.body as string || "{}");
+      const updated = { ...items[existingIndex], ...payload };
+      items[existingIndex] = updated;
+      setStored("payments", items);
+      return Promise.resolve(updated as unknown as T);
+    }
+
+    if (existingIndex !== -1) {
+      return Promise.resolve(items[existingIndex] as unknown as T);
+    }
+  }
+
+  // /services
+  if (cleanPath === "/services") {
+    let items = getStored<ServiceItem[]>("services", SEED_SERVICES);
+    if (method === "POST") {
+      const payload: Partial<ServiceItem> = JSON.parse(options.body as string || "{}");
+      const newSvc: ServiceItem = {
+        id: payload.id || `SVC-${Math.floor(Math.random() * 900 + 100)}`,
+        name: payload.name || "New Service",
+        description: payload.description || "",
+        entityTypes: payload.entityTypes || [],
+        scope: payload.scope || "",
+        status: payload.status || "Active",
+      };
+      setStored("services", [...items, newSvc]);
+      return Promise.resolve(newSvc as unknown as T);
+    }
+    const status = qs.get("status");
+    if (status && status !== "All") items = items.filter((s) => s.status === status);
+    return Promise.resolve(items as unknown as T);
+  }
+
+  // /services/:id
+  if (cleanPath.startsWith("/services/")) {
+    const id = cleanPath.replace("/services/", "");
+    const items = getStored<ServiceItem[]>("services", SEED_SERVICES);
+    const idx = items.findIndex((s) => s.id === id);
+
+    if (method === "DELETE") {
+      if (idx !== -1) {
+        items.splice(idx, 1);
+        setStored("services", items);
+      }
+      return Promise.resolve(undefined as unknown as T);
+    }
+
+    if (method === "PUT") {
+      if (idx === -1) return Promise.reject(new ApiError("Service not found", "404"));
+      const payload = JSON.parse(options.body as string || "{}");
+      const updated = { ...items[idx], ...payload };
+      items[idx] = updated;
+      setStored("services", items);
+      return Promise.resolve(updated as unknown as T);
+    }
+  }
+
+  // /fees
+  if (cleanPath === "/fees") {
+    let items = getStored<FeeItem[]>("fees", SEED_FEES);
+    if (method === "POST") {
+      const payload: Partial<FeeItem> = JSON.parse(options.body as string || "{}");
+      const newFee: FeeItem = {
+        id: payload.id || `FEE-${Math.floor(Math.random() * 900 + 100)}`,
+        service: payload.service || "Service",
+        amount: payload.amount || 0,
+        basis: payload.basis || "Fixed",
+        frequency: payload.frequency || "Annual",
+        gst: payload.gst !== undefined ? payload.gst : true,
+        notes: payload.notes || "",
+      };
+      setStored("fees", [...items, newFee]);
+      return Promise.resolve(newFee as unknown as T);
+    }
+    return Promise.resolve(items as unknown as T);
+  }
+
+  // /fees/:id
+  if (cleanPath.startsWith("/fees/")) {
+    const id = cleanPath.replace("/fees/", "");
+    const items = getStored<FeeItem[]>("fees", SEED_FEES);
+    const idx = items.findIndex((f) => f.id === id);
+
+    if (method === "DELETE") {
+      if (idx !== -1) {
+        items.splice(idx, 1);
+        setStored("fees", items);
+      }
+      return Promise.resolve(undefined as unknown as T);
+    }
+
+    if (method === "PUT") {
+      if (idx === -1) return Promise.reject(new ApiError("Fee not found", "404"));
+      const payload = JSON.parse(options.body as string || "{}");
+      const updated = { ...items[idx], ...payload };
+      items[idx] = updated;
+      setStored("fees", items);
+      return Promise.resolve(updated as unknown as T);
+    }
+  }
+
+  // /staff
+  if (cleanPath === "/staff") {
+    let items = getStored<StaffMember[]>("staff", SEED_STAFF);
+    if (method === "POST") {
+      const payload: Partial<StaffMember> = JSON.parse(options.body as string || "{}");
+      const newStaff: StaffMember = {
+        id: payload.id || `STF-${Math.floor(Math.random() * 900 + 100)}`,
+        name: payload.name || "Staff Name",
+        role: payload.role || "Accountant",
+        rate: payload.rate || 150,
+        currency: payload.currency || "AUD",
+        unit: payload.unit || "hour",
+        email: payload.email || "",
+        status: payload.status || "Active",
+      };
+      setStored("staff", [...items, newStaff]);
+      return Promise.resolve(newStaff as unknown as T);
+    }
+    return Promise.resolve(items as unknown as T);
+  }
+
+  // /staff/:id
+  if (cleanPath.startsWith("/staff/")) {
+    const id = cleanPath.replace("/staff/", "");
+    const items = getStored<StaffMember[]>("staff", SEED_STAFF);
+    const idx = items.findIndex((s) => s.id === id);
+
+    if (method === "DELETE") {
+      if (idx !== -1) {
+        items.splice(idx, 1);
+        setStored("staff", items);
+      }
+      return Promise.resolve(undefined as unknown as T);
+    }
+
+    if (method === "PUT") {
+      if (idx === -1) return Promise.reject(new ApiError("Staff not found", "404"));
+      const payload = JSON.parse(options.body as string || "{}");
+      const updated = { ...items[idx], ...payload };
+      items[idx] = updated;
+      setStored("staff", items);
+      return Promise.resolve(updated as unknown as T);
+    }
+  }
+
+  // /workflows
+  if (cleanPath === "/workflows") {
+    let items = getStored<WorkflowProcess[]>("workflows", SEED_WORKFLOWS);
+    if (method === "POST") {
+      const payload: Partial<WorkflowProcess> = JSON.parse(options.body as string || "{}");
+      const newWf: WorkflowProcess = {
+        id: payload.id || `WF-${Math.floor(Math.random() * 900 + 100)}`,
+        name: payload.name || "Workflow",
+        description: payload.description || "",
+        nodesJson: payload.nodesJson || "[]",
+        edgesJson: payload.edgesJson || "[]",
+        status: payload.status || "Active",
+      };
+      setStored("workflows", [newWf, ...items]);
+      return Promise.resolve(newWf as unknown as T);
+    }
+    return Promise.resolve(items as unknown as T);
+  }
+
+  // /workflows/:id
+  if (cleanPath.startsWith("/workflows/")) {
+    const id = cleanPath.replace("/workflows/", "");
+    const items = getStored<WorkflowProcess[]>("workflows", SEED_WORKFLOWS);
+    const match = items.find((w) => w.id === id) || items[0];
+
+    if (method === "PUT") {
+      const payload = JSON.parse(options.body as string || "{}");
+      const existingIdx = items.findIndex((w) => w.id === id);
+      const updated: WorkflowProcess = {
+        ...(existingIdx !== -1 ? items[existingIdx] : items[0]),
+        ...payload,
+        id,
+      };
+      if (existingIdx !== -1) {
+        items[existingIdx] = updated;
+      } else {
+        items.unshift(updated);
+      }
+      setStored("workflows", items);
+      return Promise.resolve(updated as unknown as T);
+    }
+
+    if (!match) return Promise.reject(new ApiError("Workflow not found", "404"));
+    return Promise.resolve(match as unknown as T);
+  }
+
+  // /api-keys
+  if (cleanPath === "/api-keys") {
+    let items = getStored<ApiKeyItem[]>("api_keys", SEED_API_KEYS);
+    if (method === "POST") {
+      const payload = JSON.parse(options.body as string || "{}");
+      const newKey: ApiKeyItem = {
+        id: `key-${Math.floor(Math.random() * 90000 + 10000)}`,
+        key: payload.key || `entiq_live_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`,
+        name: payload.name || "API Key",
+        isActive: true,
+      };
+      setStored("api_keys", [newKey, ...items]);
+      return Promise.resolve(newKey as unknown as T);
+    }
+    return Promise.resolve(items as unknown as T);
+  }
+
+  // /api-keys/:id
+  if (cleanPath.startsWith("/api-keys/") && method === "DELETE") {
+    const id = cleanPath.replace("/api-keys/", "");
+    const items = getStored<ApiKeyItem[]>("api_keys", SEED_API_KEYS);
+    const updated = items.map((k) => (k.id === id ? { ...k, isActive: false } : k));
+    setStored("api_keys", updated);
+    return Promise.resolve(undefined as unknown as T);
   }
 
   return Promise.resolve({} as unknown as T);
@@ -571,34 +1470,28 @@ export const cases = {
 
   get: (id: string): Promise<OnboardingCase> => apiFetch(`/cases/${id}`),
 
-  updateStatus: (id: string, status: OnboardingCase["status"]): Promise<OnboardingCase> => {
-    const list = getStored<OnboardingCase[]>("cases", SEED_CASES);
-    const updated = list.map((c) => (c.id === id ? { ...c, status, progress: status === "Accepted" ? 100 : c.progress } : c));
-    setStored("cases", updated);
-    
-    // If case is accepted, auto-create an active engagement if not already present
-    if (status === "Accepted") {
-      const engList = getStored<Engagement[]>("engagements", SEED_ENGAGEMENTS);
-      const targetCase = list.find((c) => c.id === id);
-      if (targetCase && !engList.some((e) => e.client.toLowerCase() === targetCase.client.toLowerCase())) {
-        const now = new Date();
-        const nextYear = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
-        const newEng: Engagement = {
-          id: `ENG-2024-0${Math.floor(Math.random() * 900 + 100)}`,
-          client: targetCase.client,
-          service: targetCase.service,
-          signed: `${now.getDate()} ${now.toLocaleString("en-AU", { month: "short", year: "numeric" })}`,
-          renewalDue: `${nextYear.getDate()} ${nextYear.toLocaleString("en-AU", { month: "short", year: "numeric" })}`,
-          fee: "$4,950 pa",
-          status: "Active",
-          adviser: targetCase.owner,
-        };
-        setStored("engagements", [newEng, ...engList]);
-      }
-    }
+  updateStatus: (id: string, status: OnboardingCase["status"]): Promise<OnboardingCase> =>
+    apiFetch(`/cases/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
 
-    return Promise.resolve(updated.find((c) => c.id === id)!);
-  },
+  update: (id: string, payload: Partial<OnboardingCase>): Promise<OnboardingCase> =>
+    apiFetch(`/cases/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  delete: (id: string): Promise<void> =>
+    apiFetch(`/cases/${id}`, {
+      method: "DELETE",
+    }),
+
+  requestInfo: (id: string, payload: CaseInfoRequestPayload): Promise<CaseInfoRequestResponse> =>
+    apiFetch(`/cases/${id}/request-info`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
 
 // ─── Alerts ───────────────────────────────────────────────────────────────────
@@ -632,19 +1525,47 @@ export const invitations = {
       body: JSON.stringify(payload),
     }),
 
-  resend: (id: string): Promise<void> => {
-    const list = getStored<Invitation[]>("invitations", SEED_INVITATIONS);
-    const updated = list.map((i) => (i.id === id ? { ...i, status: "Sent", expires: "14 Aug" } : i));
-    setStored("invitations", updated);
-    return Promise.resolve();
-  },
+  resend: (id: string, payload?: { toEmail?: string }): Promise<{ emailDelivered: boolean; message: string; emailMessage?: string; simulated?: boolean; link?: string }> =>
+    apiFetch(`/invitations/${id}/resend`, {
+      method: "POST",
+      body: payload ? JSON.stringify(payload) : undefined,
+    }),
 
-  cancel: (id: string): Promise<void> => {
-    const list = getStored<Invitation[]>("invitations", SEED_INVITATIONS);
-    const updated = list.map((i) => (i.id === id ? { ...i, status: "Cancelled" } : i));
-    setStored("invitations", updated);
-    return Promise.resolve();
-  },
+  cancel: (id: string): Promise<void> =>
+    apiFetch(`/invitations/${id}/cancel`, { method: "POST" }),
+
+  update: (id: string, inv: Partial<Invitation>): Promise<Invitation> =>
+    apiFetch(`/invitations/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(inv),
+    }),
+
+  delete: (id: string): Promise<void> =>
+    apiFetch(`/invitations/${id}`, {
+      method: "DELETE",
+    }),
+
+  getEmailConfig: (): Promise<EmailConfig> => apiFetch("/invitations/email-config"),
+
+  updateEmailConfig: (data: EmailConfigUpdate): Promise<EmailConfig> =>
+    apiFetch("/invitations/email-config", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  testEmail: (payload: TestEmailPayload): Promise<EmailSendResult> =>
+    apiFetch("/invitations/test-email", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getPublic: (id: string): Promise<Invitation> =>
+    apiFetch(`/invitations/public/${id}`),
+
+  acceptPublic: (id: string): Promise<{ status: string; message: string }> =>
+    apiFetch(`/invitations/public/${id}/accept`, {
+      method: "POST",
+    }),
 };
 
 // ─── Clients / Entities ───────────────────────────────────────────────────────
@@ -658,22 +1579,28 @@ export const clients = {
     return apiFetch(`/clients${qs.toString() ? `?${qs}` : ""}`);
   },
 
-  create: (client: ClientEntity): Promise<ClientEntity> => {
-    const list = getStored<ClientEntity[]>("clients", SEED_CLIENTS);
-    const fullClient: ClientEntity = {
-      id: client.id || `${client.type === "Individual" ? "P" : "E"}-${Math.floor(Math.random() * 90000 + 10000)}`,
-      name: client.name,
-      type: client.type,
-      abn: client.abn || "",
-      acn: client.acn || "",
-      verified: client.verified || "Document",
-      cases: client.cases ?? 0,
-      engagements: client.engagements ?? 0,
-      added: client.added || "Today",
-    };
-    setStored("clients", [fullClient, ...list]);
-    return Promise.resolve(fullClient);
-  },
+  create: (client: ClientEntity): Promise<ClientEntity> =>
+    apiFetch("/clients", {
+      method: "POST",
+      body: JSON.stringify(client),
+    }),
+
+  createBatch: (clientList: ClientEntity[]): Promise<ClientEntity[]> =>
+    apiFetch("/clients/batch", {
+      method: "POST",
+      body: JSON.stringify(clientList),
+    }),
+
+  update: (id: string, client: Partial<ClientEntity>): Promise<ClientEntity> =>
+    apiFetch(`/clients/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(client),
+    }),
+
+  delete: (id: string): Promise<void> =>
+    apiFetch(`/clients/${id}`, {
+      method: "DELETE",
+    }),
 };
 
 // ─── Engagements ───────────────────────────────────────────────────────
@@ -686,17 +1613,28 @@ export const engagements = {
     return apiFetch(`/engagements${qs.toString() ? `?${qs}` : ""}`);
   },
 
-  create: (engagement: Engagement): Promise<Engagement> => {
-    const list = getStored<Engagement[]>("engagements", SEED_ENGAGEMENTS);
-    setStored("engagements", [engagement, ...list]);
-    return Promise.resolve(engagement);
-  },
+  create: (engagement: Engagement): Promise<Engagement> =>
+    apiFetch("/engagements", {
+      method: "POST",
+      body: JSON.stringify(engagement),
+    }),
 
-  updateStatus: (id: string, status: string): Promise<void> => {
-    const list = getStored<Engagement[]>("engagements", SEED_ENGAGEMENTS);
-    setStored("engagements", list.map((e) => (e.id === id ? { ...e, status } : e)));
-    return Promise.resolve();
-  },
+  update: (id: string, eng: Partial<Engagement>): Promise<Engagement> =>
+    apiFetch(`/engagements/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(eng),
+    }),
+
+  updateStatus: (id: string, status: string): Promise<void> =>
+    apiFetch(`/engagements/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+
+  delete: (id: string): Promise<void> =>
+    apiFetch(`/engagements/${id}`, {
+      method: "DELETE",
+    }),
 };
 
 // ─── Activity ─────────────────────────────────────────────────────────────────
@@ -709,12 +1647,11 @@ export const activity = {
     return apiFetch(`/activity${qs.toString() ? `?${qs}` : ""}`);
   },
 
-  log: (event: Omit<ActivityEvent, "id">): Promise<void> => {
-    const list = getStored<ActivityEvent[]>("activity", SEED_ACTIVITY);
-    const newEv: ActivityEvent = { ...event, id: Date.now() };
-    setStored("activity", [newEv, ...list]);
-    return Promise.resolve();
-  },
+  log: (event: Omit<ActivityEvent, "id">): Promise<void> =>
+    apiFetch("/activity", {
+      method: "POST",
+      body: JSON.stringify(event),
+    }),
 };
 
 // ─── Templates ────────────────────────────────────────────────────────────────
@@ -727,3 +1664,188 @@ export const templates = {
     return apiFetch(`/templates${qs.toString() ? `?${qs}` : ""}`);
   },
 };
+
+// ─── Billing & Payments ───────────────────────────────────────────────────────
+
+export const billing = {
+  getStats: (): Promise<BillingStats> => apiFetch("/billing/stats"),
+
+  listSchedules: (params?: { client?: string; status?: string; page?: number; pageSize?: number }): Promise<PaginatedResponse<BillingSchedule>> => {
+    const qs = new URLSearchParams();
+    if (params?.client) qs.set("client", params.client);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.page) qs.set("page", String(params.page));
+    if (params?.pageSize) qs.set("pageSize", String(params.pageSize));
+    return apiFetch(`/billing/schedules${qs.toString() ? `?${qs}` : ""}`);
+  },
+
+  createSchedule: (payload: Partial<BillingSchedule>): Promise<BillingSchedule> =>
+    apiFetch("/billing/schedules", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateSchedule: (id: string, payload: Partial<BillingSchedule>): Promise<BillingSchedule> =>
+    apiFetch(`/billing/schedules/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteSchedule: (id: string): Promise<void> =>
+    apiFetch(`/billing/schedules/${id}`, {
+      method: "DELETE",
+    }),
+
+  listInvoices: (params?: { client?: string; status?: string; page?: number; pageSize?: number }): Promise<PaginatedResponse<Invoice>> => {
+    const qs = new URLSearchParams();
+    if (params?.client) qs.set("client", params.client);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.page) qs.set("page", String(params.page));
+    if (params?.pageSize) qs.set("pageSize", String(params.pageSize));
+    return apiFetch(`/billing/invoices${qs.toString() ? `?${qs}` : ""}`);
+  },
+
+  createInvoice: (payload: Partial<Invoice>): Promise<Invoice> =>
+    apiFetch("/billing/invoices", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateInvoiceStatus: (id: string, status: string): Promise<Invoice> =>
+    apiFetch(`/billing/invoices/${id}/status?new_status=${encodeURIComponent(status)}`, {
+      method: "PATCH",
+    }),
+
+  updateInvoice: (id: string, payload: Partial<Invoice>): Promise<Invoice> =>
+    apiFetch(`/billing/invoices/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteInvoice: (id: string): Promise<void> =>
+    apiFetch(`/billing/invoices/${id}`, {
+      method: "DELETE",
+    }),
+
+  listPayments: (params?: { client?: string; status?: string; page?: number; pageSize?: number }): Promise<PaginatedResponse<Payment>> => {
+    const qs = new URLSearchParams();
+    if (params?.client) qs.set("client", params.client);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.page) qs.set("page", String(params.page));
+    if (params?.pageSize) qs.set("pageSize", String(params.pageSize));
+    return apiFetch(`/billing/payments${qs.toString() ? `?${qs}` : ""}`);
+  },
+
+  recordPayment: (payload: Partial<Payment>): Promise<Payment> =>
+    apiFetch("/billing/payments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updatePayment: (id: string, payload: Partial<Payment>): Promise<Payment> =>
+    apiFetch(`/billing/payments/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deletePayment: (id: string): Promise<void> =>
+    apiFetch(`/billing/payments/${id}`, {
+      method: "DELETE",
+    }),
+};
+
+// ─── Services & Pricing ───────────────────────────────────────────────────────
+
+export const services = {
+  listServices: (status?: string): Promise<ServiceItem[]> => {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    return apiFetch(`/services${qs}`);
+  },
+
+  createService: (payload: Partial<ServiceItem>): Promise<ServiceItem> =>
+    apiFetch("/services", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateService: (id: string, payload: Partial<ServiceItem>): Promise<ServiceItem> =>
+    apiFetch(`/services/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteService: (id: string): Promise<void> =>
+    apiFetch(`/services/${id}`, {
+      method: "DELETE",
+    }),
+
+  listFees: (): Promise<FeeItem[]> => apiFetch("/fees"),
+
+  createFee: (payload: Partial<FeeItem>): Promise<FeeItem> =>
+    apiFetch("/fees", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateFee: (id: string, payload: Partial<FeeItem>): Promise<FeeItem> =>
+    apiFetch(`/fees/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteFee: (id: string): Promise<void> =>
+    apiFetch(`/fees/${id}`, {
+      method: "DELETE",
+    }),
+
+  listStaff: (): Promise<StaffMember[]> => apiFetch("/staff"),
+
+  createStaff: (payload: Partial<StaffMember>): Promise<StaffMember> =>
+    apiFetch("/staff", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateStaff: (id: string, payload: Partial<StaffMember>): Promise<StaffMember> =>
+    apiFetch(`/staff/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteStaff: (id: string): Promise<void> =>
+    apiFetch(`/staff/${id}`, {
+      method: "DELETE",
+    }),
+};
+
+// ─── Process Workflows ────────────────────────────────────────────────────────
+
+export const workflows = {
+  list: (): Promise<WorkflowProcess[]> => apiFetch("/workflows"),
+
+  get: (id: string): Promise<WorkflowProcess> => apiFetch(`/workflows/${id}`),
+
+  save: (workflow: Partial<WorkflowProcess> & { id: string; name: string }): Promise<WorkflowProcess> =>
+    apiFetch(`/workflows/${workflow.id}`, {
+      method: "PUT",
+      body: JSON.stringify(workflow),
+    }),
+};
+
+// ─── API Keys Management ──────────────────────────────────────────────────────
+
+export const apiKeys = {
+  list: (): Promise<ApiKeyItem[]> => apiFetch("/api-keys"),
+
+  create: (name: string, key?: string): Promise<ApiKeyItem> =>
+    apiFetch("/api-keys", {
+      method: "POST",
+      body: JSON.stringify({ name, key }),
+    }),
+
+  revoke: (id: string): Promise<void> =>
+    apiFetch(`/api-keys/${id}`, {
+      method: "DELETE",
+    }),
+};
+

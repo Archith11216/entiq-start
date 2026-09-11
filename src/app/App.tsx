@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect, useContext, createContext } from "react";
 import IntegrationsScreen from "./IntegrationsScreen";
 import ProcessBuilderScreen from "./ProcessBuilderScreen";
 import ServicesScreen from "./ServicesScreen";
@@ -6,8 +6,13 @@ import { INITIAL_FEES, INITIAL_STAFF } from "./ServicesScreen";
 import BillingScreen from "./BillingScreen";
 import DocumentBuilderScreen from "./DocumentBuilderScreen";
 import { auth as authApi, cases as casesApi, alerts as alertsApi, invitations as invitationsApi, clients as clientsApi, engagements as engagementsApi, activity as activityApi, templates as templatesApi, ApiError, exportToCsv } from "../lib/api";
-import { AuthProvider, useAuth } from "../contexts/AuthContext";
+import { AuthProvider, useAuth, FIRM_USERS } from "../contexts/AuthContext";
 import type { OnboardingCase as ApiCase, ReviewAlert as ApiAlert, Invitation, ClientEntity, Engagement as ApiEngagement, ActivityEvent as ApiActivityEvent, Template as ApiTemplate } from "../types/api";
+import { ApiKeyModal } from "./components/ApiKeyModal";
+import { Header } from "./components/Header";
+import { NavigationContext, useNavigation, NavigationContextType } from "./NavigationContext";
+import { EmailSettingsModal } from "./components/EmailSettingsModal";
+import { ClientOnboardingPortal } from "./components/ClientOnboardingPortal";
 import {
   LayoutDashboard,
   Users,
@@ -15,8 +20,13 @@ import {
   Settings,
   Bell,
   Search,
+  Key,
+  Database,
   ChevronDown,
   ChevronRight,
+  ChevronsUpDown,
+  Check,
+  BarChart2,
   Plus,
   Filter,
   Download,
@@ -74,13 +84,18 @@ import {
   AlignLeft,
   Table,
   PenSquare,
-  ChevronsUpDown,
   GripVertical,
   Link,
   SquarePen,
   Trash,
   Package,
   IndentIncrease,
+  Minus,
+  Mail,
+  ExternalLink,
+  Loader2,
+  Send,
+  AlertCircle,
 } from "lucide-react";
 
 // ─── Types (local aliases for API types) ──────────────────────────────────────
@@ -136,9 +151,9 @@ function StatSkeleton({ count = 4 }: { count?: number }) {
   return (
     <div className={`grid grid-cols-${count} gap-3 animate-pulse`}>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="bg-card border border-border rounded-lg px-4 py-3">
-          <div className="h-2.5 w-20 rounded bg-[#F0F0F0] mb-2" />
-          <div className="h-7 w-10 rounded bg-[#F0F0F0]" />
+        <div key={i} className="bg-card border border-border rounded-lg px-3 py-2">
+          <div className="h-2 w-16 rounded bg-[#F0F0F0] mb-1.5" />
+          <div className="h-5 w-8 rounded bg-[#F0F0F0]" />
         </div>
       ))}
     </div>
@@ -231,7 +246,7 @@ function LoginScreen() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 bg-[#2855A6] text-white text-[13px] font-semibold rounded-lg hover:bg-[#1F4491] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-[#2855A6] text-white text-[13px] font-semibold rounded-lg hover:bg-[#1F4491] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
             >
               {isLoading ? (
                 <>
@@ -242,10 +257,30 @@ function LoginScreen() {
             </button>
           </form>
 
-          <div className="mt-5 px-3 py-2.5 bg-[#FEF6E9] border border-[#F5A623]/30 rounded-lg">
-            <p className="text-[11px] text-[#B87A1A] text-center">
-              <span className="font-semibold">Dev mode</span> — leave fields empty and press Sign in to bypass auth
-            </p>
+          {/* 1-Click Practice Member Switcher on Login Screen */}
+          <div className="mt-5 pt-4 border-t border-border">
+            <div className="text-[11px] font-semibold text-foreground mb-2 flex items-center justify-between">
+              <span>Quick Sign In As:</span>
+              <span className="text-[10px] text-muted-foreground font-normal">Grow Advisory Group</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {FIRM_USERS.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => login(u.email, "password123")}
+                  className="flex items-center gap-2 p-1.5 rounded-lg border border-border bg-[#FBFBFB] hover:bg-[#EEF2FA] hover:border-[#2855A6]/40 transition-colors text-left group cursor-pointer"
+                >
+                  <div className="w-6 h-6 rounded-full bg-[#2855A6]/10 group-hover:bg-[#2855A6] text-[#2855A6] group-hover:text-white flex items-center justify-center text-[10px] font-bold shrink-0 transition-colors">
+                    {u.initials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[11px] font-medium text-foreground leading-none truncate group-hover:text-[#2855A6]">{u.displayName}</div>
+                    <div className="text-[9.5px] text-muted-foreground truncate mt-0.5">{u.role}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
 
           <p className="text-center text-[11px] text-muted-foreground mt-4">
@@ -280,6 +315,43 @@ const ALERTS: ReviewAlert[] = [
   { id: "A-003", type: "conflict", severity: "warning", case: "C-2024-0891", message: "Potential related-party match detected against existing client Harrington, T.", age: "5h" },
   { id: "A-004", type: "document", severity: "warning", case: "C-2024-0887", message: "Proposal unsigned — 7 days since issue, no client response", age: "7d" },
   { id: "A-005", type: "compliance", severity: "error", case: "C-2024-0889", message: "Trust deed date predates beneficiary relationship record by 4 years", age: "2d" },
+];
+
+const INVITATIONS = [
+  { id: "INV-2024-0120", client: "Manoj Kumar", email: "manoj@manojtech.com.au", service: "Company Tax + Advisory", channel: "Email", status: "Sent", sent: "Today", expires: "18 Sept", owner: "J. Okafor" },
+  { id: "INV-2024-0112", client: "Nguyen, Thanh", email: "thanh.nguyen@email.com", service: "Individual Tax", channel: "Email", status: "Sent", sent: "28 Jul", expires: "11 Aug", owner: "S. Patel" },
+  { id: "INV-2024-0111", client: "Riverside Developments Pty Ltd", email: "admin@riverside.com.au", service: "Company Tax + BAS", channel: "Email", status: "Opened", sent: "26 Jul", expires: "9 Aug", owner: "A. Brennan" },
+  { id: "INV-2024-0110", client: "Morrison, Claire", email: "claire.m@outlook.com", service: "Individual Tax", channel: "SMS + Email", status: "Started", sent: "24 Jul", expires: "7 Aug", owner: "J. Okafor" },
+  { id: "INV-2024-0109", client: "Sunfield Unit Trust", email: "trustee@sunfield.com.au", service: "Trust Tax", channel: "QR code", status: "Expired", sent: "10 Jul", expires: "24 Jul", owner: "S. Patel" },
+  { id: "INV-2024-0108", client: "Park, Ji-Woo", email: "jwpark@gmail.com", service: "Individual Tax", channel: "Email", status: "Sent", sent: "28 Jul", expires: "11 Aug", owner: "A. Brennan" },
+  { id: "INV-2024-0107", client: "Ashworth & Partners", email: "info@ashworth.net.au", service: "Partnership Tax", channel: "Email", status: "Completed", sent: "18 Jul", expires: "1 Aug", owner: "J. Okafor" },
+];
+
+function invStatusColor(s: string) {
+  const m: Record<string, string> = {
+    Sent: "bg-[#EEF2FA] text-[#2855A6]",
+    Opened: "bg-[#FEF6E9] text-[#B87A1A]",
+    Started: "bg-[#E3F0FB] text-[#1A5DA6]",
+    Expired: "bg-[#F0F0F0] text-[#6F6F6F]",
+    Completed: "bg-[#E8F7EB] text-[#1E7A31]",
+    Cancelled: "bg-[#FCE8EB] text-[#A80016]",
+  };
+  return m[s] ?? "bg-[#F0F0F0] text-[#6F6F6F]";
+}
+
+type InvitationRow = typeof INVITATIONS[0];
+
+const CLIENTS_DATA = [
+  { id: "E-00890", name: "Manoj Tech Solutions Pty Ltd", type: "Company", abn: "88 923 104 551", acn: "923 104 551", status: "Active", verified: "Document", cases: 1, engagements: 1, added: "Aug 2026" },
+  { id: "P-00450", name: "Manoj Kumar", type: "Individual", abn: "", acn: "", status: "Active", verified: "Biometric (KYC)", cases: 1, engagements: 1, added: "Aug 2026" },
+  { id: "P-00441", name: "Harrington, Sophie", type: "Individual", abn: "", acn: "", status: "Active", verified: "Biometric (KYC)", cases: 1, engagements: 2, added: "Mar 2023" },
+  { id: "E-00882", name: "Northfield Holdings Pty Ltd", type: "Company", abn: "62 481 203 991", acn: "481 203 991", status: "Active", verified: "Document", cases: 1, engagements: 1, added: "Jan 2024" },
+  { id: "E-00881", name: "The Marcelline Family Trust", type: "Trust", abn: "51 204 771 003", acn: "", status: "Active", verified: "Manual", cases: 1, engagements: 1, added: "Jun 2023" },
+  { id: "P-00440", name: "Chen, David", type: "Individual", abn: "", acn: "", status: "Active", verified: "Document", cases: 1, engagements: 1, added: "Feb 2024" },
+  { id: "P-00439", name: "Liu, Wei", type: "Individual", abn: "", acn: "", status: "Active", verified: "Contact", cases: 1, engagements: 0, added: "Feb 2024" },
+  { id: "E-00880", name: "Apex Ventures Pty Ltd", type: "Company", abn: "77 340 918 200", acn: "340 918 200", status: "Active", verified: "Document", cases: 1, engagements: 0, added: "Jul 2024" },
+  { id: "E-00879", name: "Caldwell SMSF", type: "SMSF", abn: "39 204 881 772", acn: "", status: "Active", verified: "Document", cases: 1, engagements: 1, added: "Apr 2022" },
+  { id: "E-00878", name: "Greenbrook Unit Trust", type: "Trust", abn: "20 781 003 441", acn: "", status: "Active", verified: "Document", cases: 1, engagements: 1, added: "Nov 2021" },
 ];
 
 const conversionData = [
@@ -365,14 +437,14 @@ function SummaryCard({
   accent?: string;
 }) {
   return (
-    <div className="bg-card border border-border rounded-lg p-5 flex flex-col gap-3 hover:shadow-sm transition-shadow">
+    <div className="bg-card border border-border rounded-lg px-3 py-2 hover:shadow-sm transition-shadow">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] font-semibold text-muted-foreground uppercase tracking-wide">{label}</span>
-        <span className={`p-2 rounded-lg ${accent ?? "bg-muted"}`}>{icon}</span>
+        <span className="text-[10px] text-muted-foreground mb-0.5">{label}</span>
+        <span className={`p-1 rounded ${accent ?? "bg-muted"} [&_svg]:size-3.5`}>{icon}</span>
       </div>
-      <div className="flex items-end gap-2">
-        <span className="text-[28px] font-700 leading-none text-foreground" style={{ fontWeight: 700 }}>{value}</span>
-        {sub && <span className="text-[12px] text-muted-foreground mb-0.5">{sub}</span>}
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-[18px] font-bold text-foreground leading-tight">{value}</span>
+        {sub && <span className="text-[10px] text-muted-foreground">{sub}</span>}
       </div>
     </div>
   );
@@ -400,23 +472,46 @@ function StatusBadge({ status }: { status: CaseStatus }) {
 
 const NAV_ITEMS = [
   { label: "Start Dashboard", icon: <LayoutDashboard size={16} />, id: "dashboard" },
-  { label: "Onboarding Cases", icon: <Layers size={16} />, id: "cases" },
-  { label: "Invitations", icon: <Inbox size={16} />, id: "invitations" },
+  { label: "Onboarding Pipeline", icon: <Layers size={16} />, id: "cases" },
+  { label: "Invitations & Intake", icon: <Inbox size={16} />, id: "invitations" },
   { label: "Clients & Entities", icon: <Building2 size={16} />, id: "clients" },
-  { label: "Engagements", icon: <FileText size={16} />, id: "engagements" },
-  { label: "Billing & Payments", icon: <CreditCard size={16} />, id: "billing" },
-  { label: "Process Builder", icon: <Workflow size={16} />, id: "process-builder" },
-  { label: "Activity", icon: <Activity size={16} />, id: "activity" },
+  { label: "Proposals & Engagements", icon: <FileText size={16} />, id: "engagements" },
+  { label: "Workflow Builder", icon: <Workflow size={16} />, id: "process-builder" },
+  { label: "Onboarding Activity", icon: <Activity size={16} />, id: "activity" },
 ];
 
 const SETTINGS_ITEMS = [
-  { label: "Template Manager", icon: <FileText size={16} />, id: "templates" },
-  { label: "Services & Pricing", icon: <DollarSign size={16} />, id: "services" },
-  { label: "Integrations", icon: <Settings size={16} />, id: "integrations" },
+  { label: "Proposal Templates", icon: <FileText size={16} />, id: "templates" },
+  { label: "Services Catalogue", icon: <DollarSign size={16} />, id: "services" },
+  { label: "Module Connectors", icon: <Settings size={16} />, id: "integrations" },
+  { label: "API Keys & DB", icon: <Key size={16} />, id: "apikeys" },
 ];
 
-function Sidebar({ active, setActive }: { active: string; setActive: (id: string) => void }) {
-  const { user, logout } = useAuth();
+function Sidebar({
+  active,
+  setActive,
+  onOpenApiKeyModal,
+}: {
+  active: string;
+  setActive: (id: string) => void;
+  onOpenApiKeyModal?: () => void;
+}) {
+  const { user, logout, switchUser, availableUsers } = useAuth();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+    if (showUserMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showUserMenu]);
+
   const initials = user?.initials ?? "JO";
   const displayName = user?.displayName ?? "J. Okafor";
   const role = user?.role ?? "Partner";
@@ -459,79 +554,112 @@ function Sidebar({ active, setActive }: { active: string; setActive: (id: string
         {SETTINGS_ITEMS.map((item) => (
           <button
             key={item.id}
-            onClick={() => setActive(item.id)}
+            onClick={() => {
+              if (item.id === "apikeys") {
+                onOpenApiKeyModal?.();
+              } else {
+                setActive(item.id);
+              }
+            }}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-[13px] text-left transition-colors ${
               active === item.id
                 ? "bg-[#EEF2FA] text-[#2855A6] font-semibold"
                 : "text-[#6F6F6F] hover:bg-[#F5F5F5] hover:text-foreground"
             }`}
           >
-            <span className="text-[#9F9F9F]">{item.icon}</span>
+            <span className={item.id === "apikeys" ? "text-[#2855A6]" : "text-[#9F9F9F]"}>{item.icon}</span>
             {item.label}
           </button>
         ))}
       </nav>
 
-      {/* User footer */}
-      <div className="px-4 py-3 border-t border-border">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-[#2855A6] flex items-center justify-center text-white text-[11px] font-semibold">{initials}</div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[12px] font-semibold text-foreground leading-none truncate">{displayName}</div>
-            <div className="text-[11px] text-muted-foreground">{role}</div>
-          </div>
-          <button onClick={() => logout()} title="Sign out" className="text-muted-foreground hover:text-foreground transition-colors">
-            <LogOut size={14} />
+      {/* User footer with switch user menu */}
+      <div className="px-3 py-2.5 border-t border-border relative">
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setShowUserMenu((prev) => !prev)}
+            className="flex-1 flex items-center gap-2 text-left p-1 -ml-1 rounded-lg hover:bg-[#F5F5F5] transition-colors group cursor-pointer"
+            title="Click to switch user persona"
+          >
+            <div className="w-7 h-7 rounded-full bg-[#2855A6] flex items-center justify-center text-white text-[11px] font-semibold shrink-0 shadow-sm">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1">
+                <span className="text-[12px] font-semibold text-foreground leading-none truncate group-hover:text-[#2855A6] transition-colors">{displayName}</span>
+                <ChevronsUpDown size={11} className="text-muted-foreground group-hover:text-[#2855A6] shrink-0 transition-colors" />
+              </div>
+              <div className="text-[10px] text-muted-foreground truncate mt-0.5">{role}</div>
+            </div>
+          </button>
+
+          <button
+            onClick={onOpenApiKeyModal}
+            title="Manage API Keys & SQLite DB"
+            className="p-1.5 rounded text-muted-foreground hover:text-[#2855A6] hover:bg-[#F5F5F5] transition-colors shrink-0"
+          >
+            <Key size={13} />
+          </button>
+          <button
+            onClick={() => logout()}
+            title="Sign out"
+            className="p-1.5 rounded text-muted-foreground hover:text-[#D0021B] hover:bg-[#FCE8EB] transition-colors shrink-0"
+          >
+            <LogOut size={13} />
           </button>
         </div>
+
+        {/* Switch User Popover */}
+        {showUserMenu && (
+          <div
+            ref={userMenuRef}
+            className="absolute left-2 bottom-14 w-[240px] bg-card border border-border rounded-xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-100 text-left"
+          >
+            <div className="flex items-center justify-between px-2 py-1.5 border-b border-border mb-1.5">
+              <div>
+                <div className="text-[11px] font-bold text-foreground">Switch User Persona</div>
+                <div className="text-[9px] text-muted-foreground">Grow Advisory Group</div>
+              </div>
+              <span className="text-[9px] px-1.5 py-0.5 bg-[#EEF2FA] text-[#2855A6] rounded font-semibold">
+                {availableUsers.length} staff
+              </span>
+            </div>
+            <div className="max-h-[260px] overflow-y-auto space-y-0.5">
+              {availableUsers.map((u) => {
+                const isActive = u.id === user?.id || u.displayName === displayName;
+                return (
+                  <button
+                    key={u.id}
+                    onClick={() => {
+                      switchUser(u);
+                      setShowUserMenu(false);
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
+                      isActive
+                        ? "bg-[#EEF2FA] text-[#2855A6] font-semibold"
+                        : "hover:bg-muted text-foreground"
+                    }`}
+                  >
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                        isActive ? "bg-[#2855A6] text-white shadow-sm" : "bg-[#EAEAEA] text-[#555]"
+                      }`}
+                    >
+                      {u.initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11.5px] font-medium leading-none truncate">{u.displayName}</div>
+                      <div className="text-[9.5px] text-muted-foreground truncate mt-0.5">{u.role}</div>
+                    </div>
+                    {isActive && <Check size={13} className="text-[#2855A6] shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </aside>
-  );
-}
-
-// ─── Header ───────────────────────────────────────────────────────────────────
-
-function Header({ onNewInvitation }: { onNewInvitation: () => void; }) {
-  return (
-    <header className="h-[52px] min-h-[52px] bg-card border-b border-border flex items-center px-6 gap-4">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-        <span>EnTIQ</span>
-        <ChevronRight size={12} />
-        <span className="text-foreground font-medium">Start</span>
-        <ChevronRight size={12} />
-        <span className="text-foreground font-medium">Dashboard</span>
-      </div>
-
-      <div className="flex-1" />
-
-      {/* Search */}
-      <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <input
-          type="text"
-          placeholder="Search cases, clients, entities…"
-          className="w-[280px] pl-8 pr-4 py-1.5 text-[13px] bg-[#F5F5F5] border border-border rounded placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#2855A6]/30 focus:border-[#2855A6] transition-all"
-        />
-      </div>
-
-      {/* Actions */}
-      <button className="relative p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
-        <Bell size={16} />
-        <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-[#D0021B] rounded-full" />
-      </button>
-      <button className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
-        <HelpCircle size={16} />
-      </button>
-
-      <button
-        onClick={onNewInvitation}
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] transition-colors"
-      >
-        <Plus size={14} />
-        New engagement
-      </button>
-    </header>
   );
 }
 
@@ -626,98 +754,304 @@ function FilterBar({
   );
 }
 
-// ─── Cases Table ──────────────────────────────────────────────────────────────
+// ─── Edit Case Modal ─────────────────────────────────────────────────────────
 
-function CasesTable({
-  cases,
-  onSelect,
+function EditCaseModal({
+  c,
+  onClose,
+  onSaved,
 }: {
-  cases: OnboardingCase[];
-  onSelect: (c: OnboardingCase) => void;
+  c: OnboardingCase;
+  onClose: () => void;
+  onSaved: (updated: OnboardingCase) => void;
 }) {
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
-  const totalPages = Math.max(1, Math.ceil(cases.length / pageSize));
-  const displayedCases = cases.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const [client, setClient] = useState(c.client);
+  const [entity, setEntity] = useState(c.entity);
+  const [service, setService] = useState(c.service);
+  const [status, setStatus] = useState<CaseStatus>(c.status);
+  const [risk, setRisk] = useState<"Low" | "Medium" | "High">(c.risk);
+  const [owner, setOwner] = useState(c.owner);
+  const [due, setDue] = useState(c.due);
+  const [progress, setProgress] = useState(c.progress);
+  const [channel, setChannel] = useState(c.channel);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!client.trim()) {
+      setError("Client name is required");
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const updated = await casesApi.update(c.id, {
+        client: client.trim(),
+        entity,
+        service: service.trim(),
+        status,
+        risk,
+        owner,
+        due: due.trim(),
+        progress: Number(progress),
+        channel,
+      });
+      activityApi.log({
+        time: "Just now",
+        actor: "J. Okafor",
+        action: "Updated case details",
+        target: `${c.id} · ${client.trim()}`,
+        type: "assign",
+      });
+      onSaved(updated);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update case");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <div className="bg-card border border-border rounded-lg overflow-hidden">
-      <table className="w-full text-[12px]">
-        <thead>
-          <tr className="border-b border-border bg-[#FAFAFA]">
-            <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[100px]">Case ID</th>
-            <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Client</th>
-            <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[110px]">Entity</th>
-            <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Service</th>
-            <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[140px]">Status</th>
-            <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[80px]">Progress</th>
-            <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[60px]">Risk</th>
-            <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[80px]">Owner</th>
-            <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-[70px]">Due</th>
-            <th className="w-8" />
-          </tr>
-        </thead>
-        <tbody>
-          {displayedCases.map((c, i) => (
-            <tr
-              key={c.id}
-              onClick={() => onSelect(c)}
-              className={`border-b border-border last:border-0 hover:bg-[#F8FAFF] cursor-pointer transition-colors ${i % 2 === 0 ? "" : "bg-[#FAFAFA]/50"}`}
-            >
-              <td className="px-4 py-3">
-                <span className="font-mono text-[11px] text-[#2855A6]">{c.id}</span>
-              </td>
-              <td className="px-4 py-3 font-medium text-foreground max-w-[180px] truncate">{c.client}</td>
-              <td className="px-4 py-3 text-muted-foreground">{c.entity}</td>
-              <td className="px-4 py-3 text-muted-foreground max-w-[150px] truncate">{c.service}</td>
-              <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <ProgressBar pct={c.progress} />
-                  <span className="text-[11px] text-muted-foreground w-7 text-right">{c.progress}%</span>
-                </div>
-              </td>
-              <td className="px-4 py-3">
-                <span className={`text-[11px] font-semibold ${riskColor(c.risk)}`}>{c.risk}</span>
-              </td>
-              <td className="px-4 py-3 text-muted-foreground">{c.owner}</td>
-              <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{c.due}</td>
-              <td className="px-4 py-3">
-                <button
-                  onClick={(e) => { e.stopPropagation(); onSelect(c); }}
-                  className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                >
-                  <MoreHorizontal size={14} />
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {cases.length === 0 && (
-        <div className="py-16 text-center text-muted-foreground text-[13px]">
-          No cases match your current filters.
-        </div>
-      )}
-
-      <div className="px-4 py-2.5 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
-        <span>{cases.length} case{cases.length !== 1 ? "s" : ""} shown</span>
-        <div className="flex items-center gap-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto">
+      <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-[520px] max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+          <div>
+            <h2 className="text-[16px] font-bold text-foreground">Edit Onboarding Case</h2>
+            <p className="text-[11px] text-muted-foreground font-mono mt-0.5">{c.id} · Created {c.created}</p>
+          </div>
           <button
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            className="hover:text-foreground transition-colors disabled:opacity-40"
+            onClick={onClose}
+            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
-            Previous
+            <X size={16} />
           </button>
-          <span className="px-2 py-0.5 bg-[#EEF2FA] text-[#2855A6] rounded font-semibold">{currentPage} / {totalPages}</span>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+          {error && (
+            <div className="p-2.5 rounded bg-[#FCE8EB] border border-[#F5C2C7] text-[#A80016] text-[12px]">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label className="text-[11.5px] font-semibold text-foreground">Client / Account Name *</label>
+            <input
+              type="text"
+              value={client}
+              onChange={(e) => setClient(e.target.value)}
+              required
+              className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              placeholder="e.g. Apex Holdings Pty Ltd"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[11.5px] font-semibold text-foreground">Entity Type</label>
+              <select
+                value={entity}
+                onChange={(e) => setEntity(e.target.value)}
+                className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                {["Company", "Individual", "Trust", "SMSF", "Partnership", "Individual group"].map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11.5px] font-semibold text-foreground">Service</label>
+              <input
+                type="text"
+                value={service}
+                onChange={(e) => setService(e.target.value)}
+                className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+                placeholder="e.g. Company Tax + Advisory"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[11.5px] font-semibold text-foreground">Status</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as CaseStatus)}
+                className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                {STATUSES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11.5px] font-semibold text-foreground">Risk Level</label>
+              <select
+                value={risk}
+                onChange={(e) => setRisk(e.target.value as "Low" | "Medium" | "High")}
+                className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="Low">Low Risk</option>
+                <option value="Medium">Medium Risk</option>
+                <option value="High">High Risk</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[11.5px] font-semibold text-foreground">Assigned Owner</label>
+              <select
+                value={owner}
+                onChange={(e) => setOwner(e.target.value)}
+                className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                {["J. Okafor", "A. Brennan", "S. Patel"].map((o) => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11.5px] font-semibold text-foreground">Due Date</label>
+              <input
+                type="text"
+                value={due}
+                onChange={(e) => setDue(e.target.value)}
+                className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+                placeholder="e.g. 18 Sept"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[11.5px] font-semibold text-foreground">Progress ({progress}%)</label>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={progress}
+                onChange={(e) => setProgress(Number(e.target.value))}
+                className="w-full accent-[#2855A6] cursor-pointer mt-1"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11.5px] font-semibold text-foreground">Channel</label>
+              <select
+                value={channel}
+                onChange={(e) => setChannel(e.target.value)}
+                className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                {["Invitation", "QR code", "Referral", "Share My EnTIQ"].map((ch) => (
+                  <option key={ch} value={ch}>{ch}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="pt-3 flex justify-end gap-2 border-t border-border">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-1.5 text-[12px] font-medium border border-border rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-4 py-1.5 text-[12px] font-semibold bg-[#2855A6] text-white rounded hover:bg-[#1F4491] transition-colors disabled:opacity-40"
+            >
+              {isSubmitting ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Delete Case Modal ───────────────────────────────────────────────────────
+
+function DeleteCaseModal({
+  c,
+  onClose,
+  onDeleted,
+}: {
+  c: OnboardingCase;
+  onClose: () => void;
+  onDeleted: (caseId: string) => void;
+}) {
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    setError(null);
+    try {
+      await casesApi.delete(c.id);
+      activityApi.log({
+        time: "Just now",
+        actor: "J. Okafor",
+        action: "Deleted case",
+        target: `${c.id} · ${c.client}`,
+        type: "reject",
+      });
+      onDeleted(c.id);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete case");
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+      <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-[420px] p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-full bg-[#FCE8EB] text-[#D0021B] shrink-0">
+            <AlertTriangle size={20} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-[15px] font-bold text-foreground">Delete Onboarding Case</h3>
+            <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
+              Are you sure you want to delete case <strong className="text-foreground">{c.id}</strong> ({c.client})?
+              This will permanently remove the case and any associated review alerts.
+            </p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="p-2.5 rounded bg-[#FCE8EB] border border-[#F5C2C7] text-[#A80016] text-[11px]">
+            {error}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
           <button
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            className="hover:text-foreground transition-colors disabled:opacity-40"
+            type="button"
+            onClick={onClose}
+            disabled={isDeleting}
+            className="px-3.5 py-1.5 text-[12px] font-medium border border-border rounded hover:bg-muted text-muted-foreground transition-colors disabled:opacity-40"
           >
-            Next
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="px-3.5 py-1.5 text-[12px] font-semibold bg-[#D0021B] text-white rounded hover:bg-[#A80016] transition-colors disabled:opacity-40 flex items-center gap-1.5"
+          >
+            <Trash2 size={13} />
+            {isDeleting ? "Deleting…" : "Delete Case"}
           </button>
         </div>
       </div>
@@ -725,74 +1059,378 @@ function CasesTable({
   );
 }
 
+// ─── Cases Table ──────────────────────────────────────────────────────────────
+
+function CasesTable({
+  cases,
+  onSelect,
+  onRefresh,
+}: {
+  cases: OnboardingCase[];
+  onSelect: (c: OnboardingCase) => void;
+  onRefresh?: () => void;
+}) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [editingCase, setEditingCase] = useState<OnboardingCase | null>(null);
+  const [deletingCase, setDeletingCase] = useState<OnboardingCase | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setActiveMenuId(null);
+      }
+    };
+    if (activeMenuId) {
+      document.addEventListener("mousedown", handleOutsideClick);
+      return () => document.removeEventListener("mousedown", handleOutsideClick);
+    }
+  }, [activeMenuId]);
+
+  const pageSize = 8;
+  const totalPages = Math.max(1, Math.ceil(cases.length / pageSize));
+  const displayedCases = cases.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  return (
+    <>
+      {editingCase && (
+        <EditCaseModal
+          c={editingCase}
+          onClose={() => setEditingCase(null)}
+          onSaved={() => {
+            if (onRefresh) onRefresh();
+          }}
+        />
+      )}
+      {deletingCase && (
+        <DeleteCaseModal
+          c={deletingCase}
+          onClose={() => setDeletingCase(null)}
+          onDeleted={() => {
+            if (onRefresh) onRefresh();
+          }}
+        />
+      )}
+
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11.5px] min-w-[650px]">
+            <thead>
+              <tr className="border-b border-border bg-[#FAFAFA]">
+                <th className="text-left px-2 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Case ID</th>
+                <th className="text-left px-2 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Client</th>
+                <th className="text-left px-2 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Entity</th>
+                <th className="text-left px-2 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Service</th>
+                <th className="text-left px-2 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Status</th>
+                <th className="text-left px-2 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Progress</th>
+                <th className="text-left px-2 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Risk</th>
+                <th className="text-left px-2 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Owner</th>
+                <th className="text-left px-2 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Due</th>
+                <th className="w-8 px-1 py-1.5 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayedCases.map((c, i) => (
+                <tr
+                  key={c.id}
+                  onClick={() => onSelect(c)}
+                  className={`border-b border-border last:border-0 hover:bg-[#F8FAFF] cursor-pointer transition-colors ${i % 2 === 0 ? "" : "bg-[#FAFAFA]/50"}`}
+                >
+                  <td className="px-2 py-1.5 whitespace-nowrap">
+                    <span className="font-mono text-[10.5px] font-semibold text-[#2855A6]">{c.id}</span>
+                  </td>
+                  <td className="px-2 py-1.5 font-medium text-foreground max-w-[130px] truncate" title={c.client}>{c.client}</td>
+                  <td className="px-2 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{c.entity}</td>
+                  <td className="px-2 py-1.5 text-muted-foreground max-w-[120px] truncate text-[10.5px]" title={c.service}>{c.service}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap"><StatusBadge status={c.status} /></td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">
+                    <div className="flex items-center gap-1">
+                      <div className="w-10 h-1.5 bg-[#F0F0F0] rounded-full overflow-hidden shrink-0">
+                        <div
+                          style={{
+                            width: `${c.progress}%`,
+                            background: c.progress === 100 ? "#2EA843" : c.progress >= 70 ? "#2855A6" : c.progress >= 40 ? "#F5A623" : "#D1D1D1"
+                          }}
+                          className="h-full rounded-full transition-all"
+                        />
+                      </div>
+                      <span className="text-[9.5px] text-muted-foreground w-6 text-right font-medium">{c.progress}%</span>
+                    </div>
+                  </td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">
+                    <span className={`text-[10.5px] font-semibold ${riskColor(c.risk)}`}>{c.risk}</span>
+                  </td>
+                  <td className="px-2 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{c.owner}</td>
+                  <td className="px-2 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{c.due}</td>
+                  <td className="px-1 py-1.5 text-center relative" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveMenuId(activeMenuId === c.id ? null : c.id);
+                      }}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      title="Actions: View, Edit, Delete"
+                    >
+                      <MoreHorizontal size={13} />
+                    </button>
+                    {activeMenuId === c.id && (
+                      <div
+                        ref={menuRef}
+                        className="absolute right-1 top-7 z-40 w-36 bg-card border border-border rounded-lg shadow-xl py-1 text-left animate-in fade-in zoom-in-95 duration-100"
+                      >
+                        <button
+                          onClick={() => {
+                            setActiveMenuId(null);
+                            onSelect(c);
+                          }}
+                          className="w-full px-2.5 py-1.5 text-[11px] text-foreground hover:bg-muted flex items-center gap-2 transition-colors"
+                        >
+                          <Eye size={12} className="text-[#2855A6]" />
+                          <span>View details</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setActiveMenuId(null);
+                            setEditingCase(c);
+                          }}
+                          className="w-full px-2.5 py-1.5 text-[11px] text-foreground hover:bg-muted flex items-center gap-2 transition-colors"
+                        >
+                          <Pencil size={12} className="text-foreground" />
+                          <span>Edit case</span>
+                        </button>
+                        <div className="my-0.5 border-t border-border" />
+                        <button
+                          onClick={() => {
+                            setActiveMenuId(null);
+                            setDeletingCase(c);
+                          }}
+                          className="w-full px-2.5 py-1.5 text-[11px] text-[#D0021B] hover:bg-[#FCE8EB] flex items-center gap-2 transition-colors"
+                        >
+                          <Trash2 size={12} className="text-[#D0021B]" />
+                          <span>Delete case</span>
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {cases.length === 0 && (
+          <div className="py-12 text-center text-muted-foreground text-[12px]">
+            No cases match your current filters.
+          </div>
+        )}
+
+        <div className="px-3 py-1.5 border-t border-border flex items-center justify-between text-[10px] text-muted-foreground">
+          <span>{cases.length} case{cases.length !== 1 ? "s" : ""} shown</span>
+          <div className="flex items-center gap-2.5">
+            <button
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="hover:text-foreground transition-colors disabled:opacity-40 font-medium"
+            >
+              Previous
+            </button>
+            <span className="px-1.5 py-0.5 bg-[#EEF2FA] text-[#2855A6] rounded font-semibold">{currentPage} / {totalPages}</span>
+            <button
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="hover:text-foreground transition-colors disabled:opacity-40 font-medium"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── Review Alert Rail ────────────────────────────────────────────────────────
 
-function ReviewAlertRail({ alerts, onSelectCase }: { alerts: ReviewAlert[]; onSelectCase?: (caseId: string) => void }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-[13px] font-semibold text-foreground">Review alerts</h3>
-        <span className="px-1.5 py-0.5 rounded bg-[#FCE8EB] text-[#A80016] text-[11px] font-semibold">
-          {alerts.filter((a) => a.severity === "error").length} critical
+function ReviewAlertRail({
+  alerts,
+  onSelectCase,
+  collapsed,
+  onToggleCollapse,
+}: {
+  alerts: ReviewAlert[];
+  onSelectCase?: (caseId: string) => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}) {
+  const critCount = alerts.filter((a) => a.severity === "error").length;
+
+  if (collapsed) {
+    return (
+      <div
+        onClick={onToggleCollapse}
+        title="Click to expand Review Alerts"
+        className="w-8 shrink-0 bg-card border border-border rounded-lg py-2 px-1 flex flex-col items-center gap-2 cursor-pointer hover:bg-muted/60 transition-colors shadow-2xs select-none"
+      >
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggleCollapse && onToggleCollapse(); }}
+          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          title="Expand Review Alerts"
+        >
+          <ChevronLeft size={13} />
+        </button>
+        <div className="relative mt-1">
+          <Bell size={13} className="text-[#D0021B]" />
+          {critCount > 0 && (
+            <span className="absolute -top-1.5 -right-2 px-1 py-0.2 rounded-full bg-[#D0021B] text-white text-[8px] font-bold leading-none">
+              {critCount}
+            </span>
+          )}
+        </div>
+        <span className="text-[9px] font-semibold text-muted-foreground [writing-mode:vertical-rl] rotate-180 tracking-wider mt-2">
+          Alerts ({alerts.length})
         </span>
       </div>
+    );
+  }
 
-      {alerts.map((alert) => (
-        <div
-          key={alert.id}
-          onClick={() => onSelectCase && onSelectCase(alert.case)}
-          className={`border border-border rounded-lg p-3 border-l-[3px] ${alertBg(alert.severity)} cursor-pointer hover:shadow-sm transition-shadow`}
-        >
-          <div className="flex items-start gap-2">
-            <span className={`mt-0.5 ${alert.severity === "error" ? "text-[#D0021B]" : "text-[#F5A623]"}`}>
-              {alertIcon(alert.type)}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="font-mono text-[10px] text-[#2855A6]">{alert.case}</span>
-                <span className="text-muted-foreground text-[10px]">· {alert.age} ago</span>
-              </div>
-              <p className="text-[11px] text-foreground leading-snug">{alert.message}</p>
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1 min-w-0">
+          <h3 className="text-[11px] font-semibold text-foreground truncate">Review alerts</h3>
+          <span className="px-1 py-0.2 rounded bg-[#FCE8EB] text-[#A80016] text-[9px] font-bold shrink-0">
+            {critCount} crit
+          </span>
+        </div>
+        {onToggleCollapse && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            title="Collapse alerts rail"
+          >
+            <ChevronRight size={13} />
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-1.5 max-h-[580px] overflow-y-auto pr-0.5">
+        {alerts.map((alert) => (
+          <div
+            key={alert.id}
+            onClick={() => onSelectCase && onSelectCase(alert.case)}
+            className={`border border-border rounded-md p-1.5 border-l-[2.5px] ${alertBg(alert.severity)} cursor-pointer hover:shadow-2xs transition-shadow`}
+          >
+            <div className="flex items-center justify-between gap-1 mb-0.5">
+              <span className="font-mono text-[9.5px] text-[#2855A6] font-semibold truncate">{alert.case}</span>
+              <span className="text-muted-foreground text-[8px] shrink-0">{alert.age}</span>
+            </div>
+            <p className="text-[9.5px] text-foreground leading-snug line-clamp-2" title={alert.message}>
+              {alert.message}
+            </p>
+            <div className="mt-1 flex items-center justify-between">
+              <span className={`text-[8px] uppercase font-bold tracking-tight ${alert.severity === "error" ? "text-[#D0021B]" : "text-[#D97706]"}`}>
+                {alert.severity}
+              </span>
               <button
                 onClick={(e) => { e.stopPropagation(); onSelectCase && onSelectCase(alert.case); }}
-                className="mt-1.5 text-[11px] text-[#2855A6] font-semibold hover:underline flex items-center gap-0.5"
+                className="text-[9px] text-[#2855A6] font-semibold hover:underline flex items-center gap-0.5"
               >
-                <Eye size={11} /> Review
+                <Eye size={9} /> Review
               </button>
             </div>
           </div>
-        </div>
-      ))}
+        ))}
 
-      {alerts.length === 0 && (
-        <div className="py-6 text-center text-[12px] text-muted-foreground bg-card border border-border rounded-lg">
-          No active review alerts.
-        </div>
-      )}
+        {alerts.length === 0 && (
+          <div className="py-4 text-center text-[10px] text-muted-foreground bg-card border border-border rounded-md">
+            No active alerts
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 // ─── Case Detail Drawer ───────────────────────────────────────────────────────
 
-const TABS = ["Overview", "Parties", "Information", "Documents", "Proposal", "Acceptance", "Activity"];
+// ─── Case Detail Drawer ───────────────────────────────────────────────────────
+
+const ONBOARDING_11_STAGES = [
+  { step: 1, id: "invitation", label: "Invitation", desc: "Magic link invitation issued to prospect" },
+  { step: 2, id: "entity_details", label: "Entity Details", desc: "ABN/ACN registry match, tax residency & contact profile" },
+  { step: 3, id: "questionnaire", label: "Questionnaire", desc: "Onboarding intake questionnaire & scope discovery" },
+  { step: 4, id: "document_requests", label: "Document Requests", desc: "Prior financials, trust deeds & ASIC extracts collected" },
+  { step: 5, id: "related_parties", label: "Related Parties", desc: "Directors, trustees & beneficial owners (UBO) structure" },
+  { step: 6, id: "service_selection", label: "Service Selection", desc: "Selected services & engagement package from catalogue" },
+  { step: 7, id: "proposal", label: "Proposal", desc: "Fee proposal quote & commercial terms presentation" },
+  { step: 8, id: "engagement_prep", label: "Engagement Preparation", desc: "Letter of engagement compiled & dispatched to eSign" },
+  { step: 9, id: "external_checks", label: "External Module Checks", desc: "Verification gateway: KYC, Compliance, eSign & Mandate" },
+  { step: 10, id: "acceptance", label: "Internal Acceptance", desc: "Partner review, margin check & formal risk sign-off" },
+  { step: 11, id: "activated", label: "Client Activated", desc: "Downstream handover dispatched to EnTIQ Practice" },
+];
+
+const TABS = [
+  "Overview",
+  "11-Stage Lifecycle",
+  "External Checks (Gateway)",
+  "Parties & Structure",
+  "Documents",
+  "Proposal & Terms",
+  "Internal Acceptance",
+  "Activity",
+];
+
+const INFO_REQUEST_PRESETS = [
+  {
+    label: "Missing Photo ID",
+    text: "Please provide a clear, color copy of your valid Australian Driver Licence or Passport to complete your biometric identity verification.",
+  },
+  {
+    label: "Trust Deed / Schedule 1",
+    text: "Please upload the complete executed Trust Deed including Schedule 1, along with any subsequent Deeds of Variation or Trustee Appointments.",
+  },
+  {
+    label: "Proof of Residential Address",
+    text: "Please provide a utility bill, rates notice, or bank statement dated within the last 3 months confirming your residential address.",
+  },
+  {
+    label: "Signed Engagement Letter",
+    text: "Your engagement letter is ready for review and signing. Please open the secure client portal link to review and sign your engagement.",
+  },
+  {
+    label: "ASIC Extract / ABN",
+    text: "Please provide your current ASIC Company Extract and confirm registered office address and ultimate beneficial owners (UBO).",
+  },
+];
 
 function CaseDetailDrawer({
   c,
   onClose,
   onUpdateCase,
+  onDeleteCase,
 }: {
   c: OnboardingCase;
   onClose: () => void;
   onUpdateCase?: (updated: OnboardingCase) => void;
+  onDeleteCase?: (caseId: string) => void;
 }) {
   const [tab, setTab] = useState("Overview");
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [drawerWidthMode, setDrawerWidthMode] = useState<"compact" | "wide" | "expanded">("compact");
   const [currentCase, setCurrentCase] = useState<OnboardingCase>(c);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showInfoRequestModal, setShowInfoRequestModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [infoRequestEmail, setInfoRequestEmail] = useState("");
+  const [infoRequestSubject, setInfoRequestSubject] = useState("");
   const [infoRequestText, setInfoRequestText] = useState("");
+  const [isSendingInfoRequest, setIsSendingInfoRequest] = useState(false);
+  const [infoRequestValidationErr, setInfoRequestValidationErr] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [showPracticeHandoverBanner, setShowPracticeHandoverBanner] = useState(c.status === "Accepted");
 
   const [checklist, setChecklist] = useState({
     identity: true,
@@ -802,9 +1440,9 @@ function CaseDetailDrawer({
   });
 
   const [uploadedDocs, setUploadedDocs] = useState([
-    { name: "Primary Photo ID (Passport)", verified: true, source: "Entiq KYC Biometric", date: "22 Jul 2024" },
-    { name: "Trust Deed / Constitution", verified: true, source: "Client Upload", date: "20 Jul 2024" },
-    { name: "ASIC Company Extract", verified: true, source: "ASIC Register Sync", date: "20 Jul 2024" },
+    { name: "Primary Photo ID (Passport)", verified: true, source: "EnTIQ KYC Biometric", date: "22 Jul 2026" },
+    { name: "Trust Deed / Constitution", verified: true, source: "Client Upload", date: "20 Jul 2026" },
+    { name: "ASIC Company Extract", verified: true, source: "ASIC Register Sync", date: "20 Jul 2026" },
   ]);
 
   const showToast = (msg: string) => {
@@ -813,18 +1451,22 @@ function CaseDetailDrawer({
   };
 
   const handleStatusChange = (status: OnboardingCase["status"]) => {
-    const updated = { ...currentCase, status, progress: status === "Accepted" ? 100 : currentCase.progress };
+    const isAccepted = status === "Accepted";
+    const updated = { ...currentCase, status, progress: isAccepted ? 100 : currentCase.progress };
     setCurrentCase(updated);
+    if (isAccepted) {
+      setShowPracticeHandoverBanner(true);
+    }
     casesApi.updateStatus(updated.id, status);
     activityApi.log({
       time: "Just now",
       actor: "J. Okafor",
-      action: status === "Accepted" ? "Accepted case" : status === "Rejected" ? "Rejected case" : "Updated case status",
+      action: isAccepted ? "Accepted case & dispatched Practice Handover" : status === "Rejected" ? "Rejected case" : "Updated case status",
       target: `${updated.id} · ${updated.client}`,
-      type: status === "Accepted" ? "accept" : status === "Rejected" ? "reject" : "accept",
+      type: isAccepted ? "accept" : status === "Rejected" ? "reject" : "accept",
     });
     if (onUpdateCase) onUpdateCase(updated);
-    showToast(`Case marked as ${status}`);
+    showToast(isAccepted ? "Case Accepted! Client Activated in EnTIQ Practice" : `Case marked as ${status}`);
   };
 
   const handleAssign = (newOwner: string) => {
@@ -842,68 +1484,133 @@ function CaseDetailDrawer({
     showToast(`Assigned to ${newOwner}`);
   };
 
-  const handleSendInfoRequest = () => {
-    if (!infoRequestText.trim()) return;
-    activityApi.log({
-      time: "Just now",
-      actor: "J. Okafor",
-      action: "Requested additional information",
-      target: `${currentCase.id} · ${currentCase.client} — ${infoRequestText}`,
-      type: "request",
+  const handleOpenInfoRequest = () => {
+    const candidateEmail = currentCase.client.includes("@") ? currentCase.client.trim() : "";
+    if (!infoRequestEmail && candidateEmail) {
+      setInfoRequestEmail(candidateEmail);
+    }
+    setInfoRequestSubject(`Information Request — Case ${currentCase.id} (${currentCase.service})`);
+    setInfoRequestValidationErr(null);
+    setShowInfoRequestModal(true);
+  };
+
+  const handleApplyPreset = (presetText: string) => {
+    setInfoRequestText((prev) => {
+      if (!prev.trim()) return presetText;
+      return `${prev}\n\n${presetText}`;
     });
-    setShowInfoRequestModal(false);
-    setInfoRequestText("");
-    showToast("Information request sent to client");
+    setInfoRequestValidationErr(null);
+  };
+
+  const handleSendInfoRequest = async () => {
+    const emailToUse = infoRequestEmail.trim() || (currentCase.client.includes("@") ? currentCase.client.trim() : "");
+    if (!emailToUse || !emailToUse.includes("@")) {
+      setInfoRequestValidationErr("Please enter a valid recipient email address.");
+      return;
+    }
+    if (!infoRequestText.trim()) {
+      setInfoRequestValidationErr("Please enter details of the requested information or pick a preset template above.");
+      return;
+    }
+
+    setIsSendingInfoRequest(true);
+    setInfoRequestValidationErr(null);
+
+    try {
+      const resp = await casesApi.requestInfo(currentCase.id, {
+        recipientEmail: emailToUse,
+        message: infoRequestText.trim(),
+        subject: infoRequestSubject.trim() || undefined,
+      });
+
+      activityApi.log({
+        time: "Just now",
+        actor: currentCase.owner || "J. Okafor",
+        action: "Requested additional information",
+        target: `${currentCase.id} · ${emailToUse} — ${infoRequestText.trim().slice(0, 60)}...`,
+        type: "request",
+      });
+
+      setShowInfoRequestModal(false);
+      setInfoRequestText("");
+
+      if (resp.simulated) {
+        showToast(`Request saved for ${emailToUse} (SMTP simulated/not configured)`);
+      } else {
+        showToast(`Information request email sent to ${emailToUse}`);
+      }
+    } catch (err: any) {
+      setInfoRequestValidationErr(err?.message || "Failed to dispatch request. Please check email settings.");
+    } finally {
+      setIsSendingInfoRequest(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/30" onClick={onClose} />
-      <div className={`${isExpanded ? "w-[95vw] max-w-[1200px]" : "w-[720px]"} bg-card h-full flex flex-col shadow-2xl overflow-hidden transition-all duration-200`}>
+      <div className="flex-1 bg-black/15 backdrop-blur-[0.5px]" onClick={onClose} />
+      <div className={`${drawerWidthMode === "compact" ? "w-[460px] max-w-[90vw]" : drawerWidthMode === "wide" ? "w-[700px] max-w-[95vw]" : "w-[95vw] max-w-[1200px]"} bg-card h-full flex flex-col shadow-2xl overflow-hidden transition-all duration-200`}>
         {/* Drawer header */}
-        <div className="px-6 pt-5 pb-0 border-b border-border">
-          <div className="flex items-start justify-between mb-4">
+        <div className="px-4.5 pt-3.5 pb-0 border-b border-border">
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-mono text-[12px] text-[#2855A6] bg-[#EEF2FA] px-2 py-0.5 rounded">{currentCase.id}</span>
+              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                <span className="font-mono text-[11px] text-[#2855A6] bg-[#EEF2FA] px-1.5 py-0.5 rounded font-semibold">{currentCase.id}</span>
                 <StatusBadge status={currentCase.status} />
-                <span className={`text-[11px] font-semibold ${riskColor(currentCase.risk)}`}>
+                <span className={`text-[10.5px] font-semibold ${riskColor(currentCase.risk)}`}>
                   {currentCase.risk} risk
                 </span>
-                <span className="text-[11px] text-muted-foreground ml-2">Owner: <strong>{currentCase.owner}</strong></span>
+                <span className="text-[10.5px] text-muted-foreground ml-1">Owner: <strong>{currentCase.owner}</strong></span>
               </div>
-              <h2 className="text-[18px] font-semibold text-foreground leading-tight">{currentCase.client}</h2>
-              <p className="text-[13px] text-muted-foreground mt-0.5">{currentCase.entity} · {currentCase.service}</p>
+              <h2 className="text-[16px] font-bold text-foreground leading-tight">{currentCase.client}</h2>
+              <p className="text-[12px] text-muted-foreground mt-0.5">{currentCase.entity} · {currentCase.service}</p>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                title={isExpanded ? "Collapse width" : "Expand full width"}
-                className="p-2 rounded hover:bg-muted transition-colors text-muted-foreground"
+                onClick={() => setShowEditModal(true)}
+                title="Edit case details"
+                className="flex items-center gap-1 px-2 py-0.8 text-[10.5px] font-medium border border-border rounded hover:bg-muted transition-colors text-foreground"
               >
-                <Maximize2 size={16} />
+                <Pencil size={11} />
+                <span>Edit</span>
+              </button>
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                title="Delete this case"
+                className="flex items-center gap-1 px-2 py-0.8 text-[10.5px] font-medium border border-[#FCE8EB] bg-[#FFF5F5] rounded hover:bg-[#FCE8EB] transition-colors text-[#D0021B]"
+              >
+                <Trash2 size={11} />
+                <span>Delete</span>
+              </button>
+              <button
+                onClick={() => setDrawerWidthMode((w) => (w === "compact" ? "wide" : w === "wide" ? "expanded" : "compact"))}
+                title={drawerWidthMode === "compact" ? "Widen view (700px)" : drawerWidthMode === "wide" ? "Full-screen width (95vw)" : "Compact width (460px)"}
+                className="flex items-center gap-1 px-2 py-0.8 text-[10.5px] font-medium border border-border rounded hover:bg-muted transition-colors text-muted-foreground"
+              >
+                <Maximize2 size={11} />
+                <span className="capitalize">{drawerWidthMode}</span>
               </button>
               <button
                 onClick={onClose}
-                className="p-2 rounded hover:bg-muted transition-colors text-muted-foreground"
+                className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
               >
-                <XCircle size={18} />
+                <XCircle size={16} />
               </button>
             </div>
           </div>
 
           {/* Feedback banner */}
           {feedback && (
-            <div className="mb-3 px-3 py-2 bg-[#E8F7EB] border border-[#2EA843]/30 rounded text-[12px] font-semibold text-[#1E7A31] flex items-center gap-2">
-              <CheckCircle size={14} />
+            <div className="mb-2.5 px-3 py-1.5 bg-[#E8F7EB] border border-[#2EA843]/30 rounded text-[11px] font-semibold text-[#1E7A31] flex items-center gap-2">
+              <CheckCircle size={13} />
               {feedback}
             </div>
           )}
 
           {/* Progress */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-1.5 text-[11px]">
-              <span className="text-muted-foreground">Case progress</span>
+          <div className="mb-2.5">
+            <div className="flex items-center justify-between mb-1 text-[10.5px]">
+              <span className="text-muted-foreground">Onboarding Lifecycle Progress (11 Stages)</span>
               <span className="font-semibold text-foreground">{currentCase.progress}%</span>
             </div>
             <ProgressBar pct={currentCase.progress} />
@@ -915,7 +1622,7 @@ function CaseDetailDrawer({
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`px-4 py-2 text-[12px] font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                className={`px-3 py-1.5 text-[11px] font-semibold border-b-2 transition-colors whitespace-nowrap ${
                   tab === t
                     ? "border-[#2855A6] text-[#2855A6]"
                     : "border-transparent text-muted-foreground hover:text-foreground"
@@ -928,15 +1635,15 @@ function CaseDetailDrawer({
         </div>
 
         {/* Tab content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-4.5 py-4">
           {tab === "Overview" && (
             <div className="space-y-5">
               <div className="grid grid-cols-2 gap-4">
                 {[
                   ["Channel", currentCase.channel],
                   ["Responsible owner", currentCase.owner],
-                  ["Created date", currentCase.created + " Jul 2026"],
-                  ["Due date", currentCase.due + " Jul 2026"],
+                  ["Created date", currentCase.created.includes("202") ? currentCase.created : currentCase.created.includes(" ") ? `${currentCase.created} 2026` : `${currentCase.created}`],
+                  ["Due date", currentCase.due.includes("202") ? currentCase.due : currentCase.due.includes(" ") ? `${currentCase.due} 2026` : `${currentCase.due}`],
                 ].map(([k, v]) => (
                   <div key={k} className="bg-[#F5F5F5] rounded-lg p-3">
                     <div className="text-[11px] text-muted-foreground mb-0.5">{k}</div>
@@ -945,37 +1652,193 @@ function CaseDetailDrawer({
                 ))}
               </div>
 
-              <div>
-                <h3 className="text-[13px] font-semibold text-foreground mb-3">Onboarding stages</h3>
-                <div className="space-y-2">
-                  {[
-                    { label: "Identity and contact — via Entiq KYC", done: true },
-                    { label: "Entity information", done: currentCase.progress > 40 },
-                    { label: "Documents and verification", done: currentCase.progress > 60 },
-                    { label: "Service selection", done: currentCase.progress > 70 },
-                    { label: "Proposal and signing — via eSign", done: currentCase.progress > 85 },
-                    { label: "Internal acceptance", done: currentCase.progress === 100 },
-                  ].map((stage) => (
-                    <div key={stage.label} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
-                      {stage.done ? (
-                        <CheckCircle size={14} className="text-[#2EA843] shrink-0" />
-                      ) : (
-                        <Clock size={14} className="text-[#F5A623] shrink-0" />
-                      )}
-                      <span className={`text-[13px] ${stage.done ? "text-foreground" : "text-muted-foreground"}`}>
-                        {stage.label}
-                      </span>
-                      {stage.done && (
-                        <span className="ml-auto text-[11px] text-[#2EA843] font-semibold">Completed</span>
-                      )}
+              {/* 11-Stage summary tracker */}
+              <div className="border border-border rounded-lg p-3.5 bg-card space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[13px] font-semibold text-foreground">11-Stage Onboarding Lifecycle</h3>
+                  <button onClick={() => setTab("11-Stage Lifecycle")} className="text-[11px] text-[#2855A6] font-semibold hover:underline">View all 11 stages →</button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11.5px]">
+                  <div className="p-2 rounded bg-[#EEF2FA]/50 border border-[#2855A6]/20">
+                    <span className="text-muted-foreground">Current Stage:</span>
+                    <div className="font-semibold text-[#2855A6]">
+                      {currentCase.progress >= 100 ? "Stage 11: Client Activated" : currentCase.progress >= 85 ? "Stage 10: Internal Acceptance" : currentCase.progress >= 70 ? "Stage 9: External Module Checks" : currentCase.progress >= 60 ? "Stage 7: Proposal" : "Stage 2: Entity Intake"}
                     </div>
-                  ))}
+                  </div>
+                  <div className="p-2 rounded bg-[#F5F5F5] border border-border">
+                    <span className="text-muted-foreground">Gateway Status:</span>
+                    <div className="font-semibold text-foreground">
+                      {currentCase.status === "Accepted" ? "4/4 Checks Cleared" : "Checks in progress"}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {tab === "Parties" && (
+          {tab === "11-Stage Lifecycle" && (
+            <div className="space-y-4">
+              <div className="bg-[#EEF2FA] border border-[#2855A6]/20 rounded-lg p-3 text-[12px] text-[#1C2D4F]">
+                <strong>EnTIQ Start Boundary:</strong> Start orchestrates all 11 stages from lead invitation to client activation, delegating verification and billing execution to companion modules.
+              </div>
+              <div className="space-y-2">
+                {ONBOARDING_11_STAGES.map((s) => {
+                  const stageThreshold = (s.step / 11) * 100;
+                  const isDone = currentCase.progress >= stageThreshold || (currentCase.status === "Accepted");
+                  const isCurrent = !isDone && (currentCase.progress >= ((s.step - 1) / 11) * 100);
+                  return (
+                    <div
+                      key={s.id}
+                      className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${
+                        isDone
+                          ? "bg-[#F8FCF8] border-[#2EA843]/30"
+                          : isCurrent
+                          ? "bg-[#EEF2FA] border-[#2855A6]"
+                          : "bg-card border-border opacity-70"
+                      }`}
+                    >
+                      <div
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 ${
+                          isDone
+                            ? "bg-[#2EA843] text-white"
+                            : isCurrent
+                            ? "bg-[#2855A6] text-white"
+                            : "bg-[#E0E0E0] text-muted-foreground"
+                        }`}
+                      >
+                        {isDone ? <Check size={13} /> : s.step}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-[12.5px] font-semibold text-foreground">Stage {s.step}: {s.label}</h4>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                              isDone
+                                ? "bg-[#E8F7EB] text-[#1E7A31]"
+                                : isCurrent
+                                ? "bg-[#2855A6] text-white"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {isDone ? "Completed" : isCurrent ? "Active Stage" : "Pending"}
+                          </span>
+                        </div>
+                        <p className="text-[11.5px] text-muted-foreground mt-0.5">{s.desc}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {tab === "External Checks (Gateway)" && (
+            <div className="space-y-4">
+              <div className="bg-[#FAFAFA] border border-border rounded-lg p-3 text-[12px] text-muted-foreground">
+                <strong className="text-foreground">Stage 9 External Module Verification Gateway:</strong> Aggregates external validation signals from EnTIQ companion modules prior to internal partner acceptance.
+              </div>
+
+              <div className="grid grid-cols-1 gap-3.5">
+                {/* 1. KYC Card */}
+                <div className="border border-border rounded-lg p-4 bg-card hover:border-[#2855A6]/40 transition-colors">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded bg-[#EEF2FA] text-[#2855A6] flex items-center justify-center">
+                        <UserCheck size={15} />
+                      </div>
+                      <div>
+                        <div className="text-[12.5px] font-bold text-foreground">1. Identity Verification (KYC)</div>
+                        <div className="text-[10.5px] text-muted-foreground">Source: EnTIQ KYC / Didit Engine</div>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-[#E8F7EB] text-[#1E7A31] text-[11px] font-bold flex items-center gap-1">
+                      <CheckCircle size={12} /> Complete
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11.5px] bg-[#F9F9F9] p-2.5 rounded mt-2">
+                    <div><span className="text-muted-foreground">Method:</span> <strong>Passport NFC &amp; 3D Biometric</strong></div>
+                    <div><span className="text-muted-foreground">Verified At:</span> <span>22 Jul 2026, 10:15 am</span></div>
+                    <div><span className="text-muted-foreground">Subject:</span> <span>{currentCase.client}</span></div>
+                    <div><span className="text-muted-foreground">Reference:</span> <span className="font-mono text-[10.5px]">KYC-2026-9812</span></div>
+                  </div>
+                </div>
+
+                {/* 2. Compliance / AML Card */}
+                <div className="border border-border rounded-lg p-4 bg-card hover:border-[#2855A6]/40 transition-colors">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded bg-[#EEF2FA] text-[#2855A6] flex items-center justify-center">
+                        <Shield size={15} />
+                      </div>
+                      <div>
+                        <div className="text-[12.5px] font-bold text-foreground">2. AML / PEP &amp; Sanctions Screening</div>
+                        <div className="text-[10.5px] text-muted-foreground">Source: EnTIQ Compliance &amp; AML Engine</div>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-[#E8F7EB] text-[#1E7A31] text-[11px] font-bold flex items-center gap-1">
+                      <CheckCircle size={12} /> Cleared
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11.5px] bg-[#F9F9F9] p-2.5 rounded mt-2">
+                    <div><span className="text-muted-foreground">PEP Screening:</span> <strong className="text-[#1E7A31]">0 Matches (Clear)</strong></div>
+                    <div><span className="text-muted-foreground">Sanctions:</span> <strong className="text-[#1E7A31]">0 Matches (Clear)</strong></div>
+                    <div><span className="text-muted-foreground">Risk Rating:</span> <span className="font-semibold text-[#1E7A31]">Low Risk (Score 18/100)</span></div>
+                    <div><span className="text-muted-foreground">Screened:</span> <span>22 Jul 2026</span></div>
+                  </div>
+                </div>
+
+                {/* 3. eSign Envelope Card */}
+                <div className="border border-border rounded-lg p-4 bg-card hover:border-[#2855A6]/40 transition-colors">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded bg-[#EEF2FA] text-[#2855A6] flex items-center justify-center">
+                        <FileCheck size={15} />
+                      </div>
+                      <div>
+                        <div className="text-[12.5px] font-bold text-foreground">3. Electronic Signature (eSign)</div>
+                        <div className="text-[10.5px] text-muted-foreground">Source: EnTIQ Documents &amp; eSign Module</div>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-[#E8F7EB] text-[#1E7A31] text-[11px] font-bold flex items-center gap-1">
+                      <CheckCircle size={12} /> Executed &amp; Sealed
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11.5px] bg-[#F9F9F9] p-2.5 rounded mt-2">
+                    <div><span className="text-muted-foreground">Document:</span> <span className="truncate block font-medium">Letter of Engagement (Standard).pdf</span></div>
+                    <div><span className="text-muted-foreground">Signed Timestamp:</span> <span>23 Jul 2026, 04:30 pm</span></div>
+                    <div><span className="text-muted-foreground">Certificate:</span> <span className="font-mono text-[10.5px]">CERT-ESIGN-884920</span></div>
+                    <div><span className="text-muted-foreground">Integrity:</span> <span className="text-[#1E7A31] font-semibold">SHA-256 Validated</span></div>
+                  </div>
+                </div>
+
+                {/* 4. Billing Mandate Card */}
+                <div className="border border-border rounded-lg p-4 bg-card hover:border-[#2855A6]/40 transition-colors">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded bg-[#EEF2FA] text-[#2855A6] flex items-center justify-center">
+                        <CreditCard size={15} />
+                      </div>
+                      <div>
+                        <div className="text-[12.5px] font-bold text-foreground">4. Billing &amp; Payment Mandate</div>
+                        <div className="text-[10.5px] text-muted-foreground">Source: EnTIQ Billing &amp; Payments Mandate Instruction</div>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-[#E8F7EB] text-[#1E7A31] text-[11px] font-bold flex items-center gap-1">
+                      <CheckCircle size={12} /> Mandate Authorised
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11.5px] bg-[#F9F9F9] p-2.5 rounded mt-2">
+                    <div><span className="text-muted-foreground">Mandate Type:</span> <strong>Direct Debit Mandate</strong></div>
+                    <div><span className="text-muted-foreground">Frequency:</span> <span>Monthly in advance</span></div>
+                    <div><span className="text-muted-foreground">Quoted Fee:</span> <span className="font-semibold">$4,950.00 pa</span></div>
+                    <div><span className="text-muted-foreground">First Cycle:</span> <span>1 Aug 2026</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tab === "Parties & Structure" && (
             <div className="space-y-4">
               <div className="bg-[#F5F5F5] rounded-lg p-4">
                 <div className="flex items-center gap-3 mb-2">
@@ -1001,31 +1864,6 @@ function CaseDetailDrawer({
                   <div><span className="text-muted-foreground">Authorized Signatory:</span> <span>{currentCase.client}</span></div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {tab === "Information" && (
-            <div className="space-y-4">
-              {[
-                { title: "Personal & Contact Details", items: [["Full Legal Name", currentCase.client], ["Date of Birth", "14/05/1982"], ["Email", "client@example.com"], ["Mobile", "+61 412 345 678"]] },
-                { title: "Residency and Australian Tax Status", items: [["Residency for Tax Purposes", "Australian Resident"], ["TFN Provided", "Yes (Stored in Encrypted Vault)"], ["GST Registered", "Yes"]] },
-                { title: "Declarations & Consents", items: [["Privacy Policy Accepted", "Yes · 22 Jul 2026"], ["Biometric KYC Consent", "Yes · 22 Jul 2026"], ["Electronic Signing Consent", "Yes · 22 Jul 2026"]] },
-              ].map((section) => (
-                <div key={section.title} className="border border-border rounded-lg overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 bg-[#FAFAFA] border-b border-border">
-                    <span className="text-[12px] font-semibold text-foreground">{section.title}</span>
-                    <CheckCircle size={14} className="text-[#2EA843]" />
-                  </div>
-                  <div className="p-4 grid grid-cols-2 gap-3 text-[12px]">
-                    {section.items.map(([k, v]) => (
-                      <div key={k}>
-                        <div className="text-[11px] text-muted-foreground">{k}</div>
-                        <div className="font-medium text-foreground mt-0.5">{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
             </div>
           )}
 
@@ -1080,7 +1918,7 @@ function CaseDetailDrawer({
             </div>
           )}
 
-          {tab === "Proposal" && (
+          {tab === "Proposal & Terms" && (
             <div className="space-y-4">
               <div className="border border-border rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -1104,24 +1942,39 @@ function CaseDetailDrawer({
               </div>
 
               <div className="bg-[#F5F5F5] rounded-lg p-4 space-y-2 text-[12px]">
-                <div className="font-semibold text-foreground">Billing Schedule</div>
-                <div className="text-muted-foreground">Square recurring direct debit, invoiced monthly ($412.50 / mo incl. GST).</div>
+                <div className="font-semibold text-foreground">Billing Instruction Mandate</div>
+                <div className="text-muted-foreground">Direct debit payment authority recorded. Monthly billing cycle ($412.50 / mo incl. GST).</div>
               </div>
             </div>
           )}
 
-          {tab === "Acceptance" && (
+          {tab === "Internal Acceptance" && (
             <div className="space-y-4">
+              {showPracticeHandoverBanner && (
+                <div className="bg-[#E8F7EB] border border-[#2EA843]/30 rounded-lg p-4 text-[12px] text-[#1E7A31] space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-[13px]">
+                    <CheckCircle size={16} /> Downstream Practice Handover Completed (Stage 11)
+                  </div>
+                  <p className="text-muted-foreground">Client record, contact profile, and approved service scope have been dispatched and provisioned in <strong>EnTIQ Practice</strong>.</p>
+                  <div className="grid grid-cols-2 gap-2 bg-white/70 p-2.5 rounded border border-[#2EA843]/20 font-mono text-[11px]">
+                    <div>Client ID: <strong>{currentCase.id}</strong></div>
+                    <div>Entity: <strong>{currentCase.entity}</strong></div>
+                    <div>Status: <strong>Active Practice Client</strong></div>
+                    <div>Ledger Synced: <strong>Yes</strong></div>
+                  </div>
+                </div>
+              )}
+
               <div className="border border-border rounded-lg p-4 space-y-3">
-                <h4 className="text-[13px] font-semibold text-foreground">Partner Risk &amp; Compliance Sign-off</h4>
-                <p className="text-[12px] text-muted-foreground">Confirm all mandatory practice requirements prior to formal case acceptance.</p>
+                <h4 className="text-[13px] font-semibold text-foreground">Stage 10: Partner Risk &amp; Compliance Sign-off</h4>
+                <p className="text-[12px] text-muted-foreground">Confirm all 4 external module checks are satisfied prior to formal client activation.</p>
 
                 <div className="space-y-2.5 pt-2">
                   {[
-                    { key: "identity", label: "Client identity verified via Entiq KYC biometric checks" },
-                    { key: "aml", label: "AML/CTF and Sanctions screening cleared with no high risk flags" },
-                    { key: "conflicts", label: "Conflict of interest search completed against firm database" },
-                    { key: "margin", label: "Agreed fee conforms to practice margin and fee schedule" },
+                    { key: "identity", label: "Client identity verified via EnTIQ KYC" },
+                    { key: "aml", label: "AML/CTF and Sanctions screening cleared via EnTIQ Compliance" },
+                    { key: "conflicts", label: "Conflict of interest search completed against firm register" },
+                    { key: "margin", label: "Agreed fee conforms to practice margin and pricing catalogue" },
                   ].map((item) => (
                     <label key={item.key} className="flex items-center gap-3 p-2.5 rounded-lg border border-border bg-card cursor-pointer hover:border-[#2855A6]/40 transition-colors">
                       <input
@@ -1141,7 +1994,7 @@ function CaseDetailDrawer({
                   onClick={() => handleStatusChange("Accepted")}
                   className="flex-1 py-2.5 bg-[#1E7A31] text-white text-[13px] font-semibold rounded hover:bg-[#186227] transition-colors flex items-center justify-center gap-1.5"
                 >
-                  <CheckCircle size={15} /> Accept Engagement
+                  <CheckCircle size={15} /> Approve &amp; Activate Client (Stage 11)
                 </button>
                 <button
                   onClick={() => handleStatusChange("Conditional")}
@@ -1163,7 +2016,7 @@ function CaseDetailDrawer({
             <div className="space-y-3">
               {[
                 { time: "Today, 11:42 am", actor: currentCase.owner, action: `Viewed case ${currentCase.id}` },
-                { time: "22 Jul, 10:15 am", actor: "System", action: "Identity verification completed via Entiq KYC" },
+                { time: "22 Jul, 10:15 am", actor: "System", action: "Identity verification completed via EnTIQ KYC" },
                 { time: "20 Jul, 2:30 pm", actor: "Client", action: "Completed onboarding questionnaire" },
                 { time: "18 Jul, 9:00 am", actor: currentCase.owner, action: `Case initialized via ${currentCase.channel}` },
               ].map((ev, i) => (
@@ -1181,30 +2034,31 @@ function CaseDetailDrawer({
         </div>
 
         {/* Drawer actions */}
-        <div className="border-t border-border px-6 py-4 flex items-center gap-3">
+        <div className="border-t border-border px-4 py-2.5 flex items-center gap-2">
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="px-4 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] transition-colors"
+            onClick={() => setDrawerWidthMode((prev) => (prev === "compact" ? "wide" : "compact"))}
+            className="px-2.5 py-1.5 bg-[#2855A6] text-white text-[11.5px] font-semibold rounded hover:bg-[#1F4491] transition-colors"
           >
-            {isExpanded ? "Standard view" : "Open full case"}
+            {drawerWidthMode === "compact" ? "Wider view" : "Compact view"}
           </button>
           <button
             onClick={() => setShowAssignModal(true)}
-            className="px-4 py-2 border border-border text-[13px] font-semibold rounded hover:bg-muted transition-colors"
+            className="px-2.5 py-1.5 border border-border text-[11.5px] font-semibold rounded hover:bg-muted transition-colors"
           >
             Assign
           </button>
           <button
-            onClick={() => setShowInfoRequestModal(true)}
-            className="px-4 py-2 border border-border text-[13px] font-semibold rounded hover:bg-muted transition-colors"
+            onClick={handleOpenInfoRequest}
+            className="px-2.5 py-1.5 border border-border text-[11.5px] font-semibold rounded hover:bg-muted transition-colors flex items-center gap-1.5"
           >
-            Request information
+            <Mail size={13} className="text-[#2855A6]" />
+            <span>Request info</span>
           </button>
           <div className="flex-1" />
           {currentCase.status !== "Accepted" && (
             <button
               onClick={() => handleStatusChange("Accepted")}
-              className="px-4 py-2 bg-[#1E7A31] text-white text-[13px] font-semibold rounded hover:bg-[#186227] transition-colors"
+              className="px-3 py-1.5 bg-[#1E7A31] text-white text-[11.5px] font-semibold rounded hover:bg-[#186227] transition-colors"
             >
               Accept
             </button>
@@ -1212,7 +2066,7 @@ function CaseDetailDrawer({
           {currentCase.status !== "Rejected" && (
             <button
               onClick={() => handleStatusChange("Rejected")}
-              className="px-4 py-2 border border-[#D0021B] text-[#D0021B] text-[13px] font-semibold rounded hover:bg-[#FCE8EB] transition-colors"
+              className="px-3 py-1.5 border border-[#D0021B] text-[#D0021B] text-[11.5px] font-semibold rounded hover:bg-[#FCE8EB] transition-colors"
             >
               Reject
             </button>
@@ -1246,29 +2100,155 @@ function CaseDetailDrawer({
 
       {/* Information Request Modal */}
       {showInfoRequestModal && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40">
-          <div className="bg-card w-[480px] rounded-xl p-5 shadow-2xl border border-border space-y-4">
-            <h3 className="text-[15px] font-semibold text-foreground">Request Information from Client</h3>
-            <p className="text-[12px] text-muted-foreground">The client will receive an email/SMS notification requesting clarification or missing files.</p>
-            <textarea
-              value={infoRequestText}
-              onChange={(e) => setInfoRequestText(e.target.value)}
-              placeholder="e.g. Please provide an updated Trust Deed with execution stamps..."
-              rows={4}
-              className="w-full p-3 text-[13px] bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] resize-none"
-            />
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowInfoRequestModal(false)} className="px-3 py-1.5 text-[12px] text-muted-foreground hover:text-foreground">Cancel</button>
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 backdrop-blur-xs p-3">
+          <div className="bg-card w-full max-w-[460px] rounded-xl p-4.5 shadow-2xl border border-border space-y-3 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-[#EEF2FA] text-[#2855A6] flex items-center justify-center shrink-0">
+                  <Mail size={15} />
+                </div>
+                <div>
+                  <h3 className="text-[14.5px] font-semibold text-foreground leading-tight">Request Information from Client</h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Case <span className="font-mono text-[#2855A6] font-semibold">{currentCase.id}</span> &bull; {currentCase.client}
+                  </p>
+                </div>
+              </div>
               <button
-                disabled={!infoRequestText.trim()}
-                onClick={handleSendInfoRequest}
-                className="px-4 py-1.5 bg-[#2855A6] text-white text-[12px] font-semibold rounded hover:bg-[#1F4491] disabled:opacity-40 transition-colors"
+                type="button"
+                onClick={() => {
+                  setShowInfoRequestModal(false);
+                  setInfoRequestValidationErr(null);
+                }}
+                className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors"
               >
-                Send Request
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Recipient Email Field */}
+            <div className="space-y-1">
+              <label className="text-[11.5px] font-semibold text-foreground flex items-center justify-between">
+                <span>Recipient Email Address <span className="text-[#D0021B]">*</span></span>
+                <span className="text-[10px] font-normal text-muted-foreground">Will receive formal email</span>
+              </label>
+              <div className="relative">
+                <Mail size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="email"
+                  value={infoRequestEmail}
+                  onChange={(e) => {
+                    setInfoRequestEmail(e.target.value);
+                    if (infoRequestValidationErr) setInfoRequestValidationErr(null);
+                  }}
+                  placeholder="e.g. client@example.com"
+                  className="w-full pl-8 pr-2.5 py-1.5 text-[12px] bg-[#F5F5F5] border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] text-foreground"
+                />
+              </div>
+            </div>
+
+            {/* Presets */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Quick Template Presets (Click to insert)
+              </label>
+              <div className="flex flex-wrap gap-1">
+                {INFO_REQUEST_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => handleApplyPreset(preset.text)}
+                    className="px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-[#EEF2FA] text-[#2855A6] hover:bg-[#DCE6F7] border border-[#2855A6]/20 transition-colors flex items-center gap-0.5"
+                  >
+                    <span>+</span>
+                    <span>{preset.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Instructions Textarea */}
+            <div className="space-y-1">
+              <label className="text-[11.5px] font-semibold text-foreground flex items-center justify-between">
+                <span>Requested Information or Documents <span className="text-[#D0021B]">*</span></span>
+                <span className="text-[10px] font-normal text-muted-foreground">{infoRequestText.length} chars</span>
+              </label>
+              <textarea
+                value={infoRequestText}
+                onChange={(e) => {
+                  setInfoRequestText(e.target.value);
+                  if (infoRequestValidationErr) setInfoRequestValidationErr(null);
+                }}
+                placeholder="Detail the specific documentation, schedules, or clarifications required from the client..."
+                rows={3}
+                className="w-full p-2.5 text-[12px] bg-[#F5F5F5] border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] resize-none text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+
+            {/* Validation error display */}
+            {infoRequestValidationErr && (
+              <div className="p-2.5 bg-[#FFF5F5] border border-[#D0021B]/30 rounded-lg flex items-center gap-2 text-[11.5px] text-[#D0021B] font-medium">
+                <AlertCircle size={14} className="shrink-0" />
+                <span>{infoRequestValidationErr}</span>
+              </div>
+            )}
+
+            {/* Footer buttons */}
+            <div className="flex items-center justify-end gap-2 pt-1.5 border-t border-border">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInfoRequestModal(false);
+                  setInfoRequestValidationErr(null);
+                }}
+                className="px-3 py-1.5 text-[11.5px] font-medium text-muted-foreground hover:text-foreground rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSendingInfoRequest}
+                onClick={handleSendInfoRequest}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#2855A6] text-white text-[11.5px] font-semibold rounded-lg hover:bg-[#1F4491] disabled:opacity-50 transition-colors shadow-xs"
+              >
+                {isSendingInfoRequest ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={13} />
+                    <span>Send Request</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {showEditModal && (
+        <EditCaseModal
+          c={currentCase}
+          onClose={() => setShowEditModal(false)}
+          onSaved={(updated) => {
+            setCurrentCase(updated);
+            if (onUpdateCase) onUpdateCase(updated);
+            showToast("Case updated successfully");
+          }}
+        />
+      )}
+
+      {showDeleteModal && (
+        <DeleteCaseModal
+          c={currentCase}
+          onClose={() => setShowDeleteModal(false)}
+          onDeleted={(deletedId) => {
+            if (onDeleteCase) onDeleteCase(deletedId);
+            onClose();
+          }}
+        />
       )}
     </div>
   );
@@ -1283,6 +2263,7 @@ function NewInvitationModal({
   onClose: () => void;
   onCreated?: () => void;
 }) {
+  const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [clientSearch, setClientSearch] = useState("");
   const [givenName, setGivenName] = useState("");
@@ -1293,42 +2274,76 @@ function NewInvitationModal({
   const [service, setService] = useState("Individual Tax");
   const [channel, setChannel] = useState<"Email" | "SMS + Email" | "QR code">("Email");
   const [dueDate, setDueDate] = useState("2026-08-15");
-  const [assignTo, setAssignTo] = useState("J. Okafor");
+  const [assignTo, setAssignTo] = useState(user?.displayName ?? "J. Okafor");
+  const [inviteCompanies, setInviteCompanies] = useState<Array<{ id: string; name: string; abn: string; role: string }>>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const clientName = clientSearch || `${givenName} ${familyName}`.trim();
 
   const handleSend = async () => {
     setIsSubmitting(true);
+    setFeedback(null);
     try {
-      await invitationsApi.create({
+      const targetEmail = email.trim();
+      if (!targetEmail) {
+        setFeedback({ type: "error", text: "Please enter a valid email address on Step 1." });
+        setStep(1);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const validAddCos = (clientType === "Company" || clientType === "Trust")
+        ? inviteCompanies.filter(c => c.name.trim().length > 0)
+        : undefined;
+
+      const created = await invitationsApi.create({
         clientName: clientName || "New Client",
         clientType,
         service,
         channel,
-        email: email || "client@example.com",
+        email: targetEmail,
         mobile,
         dueDate,
         assignTo,
+        additionalCompanies: validAddCos,
       });
+
       await activityApi.log({
         time: "Just now",
         actor: assignTo,
         action: "Sent invitation",
-        target: `${clientName || "New Client"} — ${service}`,
+        target: `${clientName || "New Client"} — ${service}` + (validAddCos && validAddCos.length > 0 ? ` (+${validAddCos.length} companies)` : ""),
         type: "invite",
       });
-      if (onCreated) onCreated();
-      onClose();
+
+      if (created?.emailDelivered) {
+        setFeedback({
+          type: "success",
+          text: `Invitation created & real email delivered to ${targetEmail} via Amazon SES!`,
+        });
+      } else {
+        setFeedback({
+          type: "success",
+          text: `Invitation created! ${created?.emailMessage || `Link generated for ${targetEmail}`}`,
+        });
+      }
+
+      setTimeout(() => {
+        if (onCreated) onCreated();
+        onClose();
+      }, 1800);
+    } catch (err: any) {
+      setFeedback({ type: "error", text: err?.message || "Failed to dispatch invitation" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-card w-[560px] rounded-xl shadow-2xl overflow-hidden">
-        <div className="px-6 py-5 border-b border-border flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-card w-full max-w-[560px] max-h-[min(90vh,720px)] rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col my-auto">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-card">
           <div>
             <h2 className="text-[16px] font-semibold text-foreground">New client invitation</h2>
             <p className="text-[12px] text-muted-foreground mt-0.5">Step {step} of 3</p>
@@ -1339,7 +2354,7 @@ function NewInvitationModal({
         </div>
 
         {/* Step indicator */}
-        <div className="px-6 pt-4 flex items-center gap-3">
+        <div className="px-6 pt-3.5 pb-1 flex items-center gap-3 shrink-0 bg-card">
           {["Client", "Service", "Delivery"].map((label, i) => (
             <div key={label} className="flex items-center gap-2 flex-1">
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${i + 1 <= step ? "bg-[#2855A6] text-white" : "bg-[#F0F0F0] text-muted-foreground"}`}>
@@ -1351,7 +2366,18 @@ function NewInvitationModal({
           ))}
         </div>
 
-        <div className="px-6 py-5 space-y-4">
+        {feedback && (
+          <div className={`mx-6 mt-2 p-3 rounded-lg text-[12px] font-medium flex items-center gap-2 shrink-0 ${
+            feedback.type === "success"
+              ? "bg-[#E8F7EB] border border-[#2EA843]/30 text-[#1E7A31]"
+              : "bg-[#FCE8EB] border border-[#D0021B]/30 text-[#D0021B]"
+          }`}>
+            {feedback.type === "success" ? <CheckCircle size={15} /> : <AlertTriangle size={15} />}
+            {feedback.text}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-h-0">
           {step === 1 && (
             <>
               <div>
@@ -1408,7 +2434,10 @@ function NewInvitationModal({
                     <button
                       key={t}
                       type="button"
-                      onClick={() => setClientType(t)}
+                      onClick={() => {
+                        setClientType(t);
+                        if (t !== "Company" && t !== "Trust") setInviteCompanies([]);
+                      }}
                       className={`py-2 px-3 rounded border text-[12px] font-medium transition-colors ${clientType === t ? "border-[#2855A6] bg-[#EEF2FA] text-[#2855A6]" : "border-border text-foreground hover:border-[#2855A6]/40 hover:bg-[#EEF2FA]/40"}`}
                     >
                       {t}
@@ -1416,6 +2445,53 @@ function NewInvitationModal({
                   ))}
                 </div>
               </div>
+
+              {/* Multiple Companies Registration - ONLY for Trust & Company */}
+              {(clientType === "Company" || clientType === "Trust") && (
+                <div className="p-3 bg-[#F9FAFC] border border-border rounded-lg space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Building2 size={13} className="text-[#2855A6]" />
+                      <span className="text-[12px] font-semibold text-foreground">
+                        {clientType === "Trust" ? "Associated Companies / Corporate Trustee" : "Multiple Companies in Group"}
+                      </span>
+                      <span className="text-[10px] bg-[#EEF2FA] text-[#2855A6] font-semibold px-1.5 py-0.2 rounded">
+                        {clientType} only
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setInviteCompanies(prev => [...prev, { id: `inv_co_${Date.now()}`, name: "", abn: "", role: clientType === "Trust" ? "Corporate Trustee" : "Subsidiary" }])}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-[#2855A6] hover:underline"
+                    >
+                      <Plus size={11} /> Add Company
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {clientType === "Trust"
+                      ? "Register the Corporate Trustee company and any beneficiary companies together under this onboarding flow."
+                      : "Register multiple subsidiary companies under this corporate group invitation."}
+                  </p>
+                  {inviteCompanies.map((c, i) => (
+                    <div key={c.id} className="flex items-center gap-2">
+                      <input
+                        value={c.name}
+                        onChange={e => setInviteCompanies(prev => prev.map(item => item.id === c.id ? { ...item, name: e.target.value } : item))}
+                        placeholder={clientType === "Trust" ? `Company #${i + 1} (e.g. Trustee Pty Ltd)` : `Company #${i + 1} (e.g. Subsidiary Pty Ltd)`}
+                        className="flex-1 px-2.5 py-1.5 text-[12px] bg-white border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#2855A6]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setInviteCompanies(prev => prev.filter(item => item.id !== c.id))}
+                        className="text-muted-foreground hover:text-[#D0021B] p-1 transition-colors"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div>
                 <label className="block text-[12px] font-semibold text-foreground mb-1.5">Service</label>
                 <select
@@ -1459,6 +2535,17 @@ function NewInvitationModal({
                   ))}
                 </div>
               </div>
+              <div className="p-3 bg-[#EEF2FA] border border-[#2855A6]/20 rounded-lg text-[12px] space-y-1">
+                <div className="font-semibold text-[#2855A6] flex items-center gap-1.5">
+                  <CheckCircle size={14} /> Live Email Dispatch via Amazon SES
+                </div>
+                <div className="text-foreground text-[11px]">
+                  Invitation will be sent directly to: <strong>{email.trim() || "(No email entered — go back to Step 1)"}</strong>
+                </div>
+                <div className="text-muted-foreground text-[10px]">
+                  From: <strong>GrowKYC &lt;andrew@growadvisorygroup.com.au&gt;</strong>
+                </div>
+              </div>
               <div>
                 <label className="block text-[12px] font-semibold text-foreground mb-1.5">Due date</label>
                 <input
@@ -1475,16 +2562,16 @@ function NewInvitationModal({
                   onChange={(e) => setAssignTo(e.target.value)}
                   className="w-full px-3 py-2 text-[13px] bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] transition-all"
                 >
-                  <option value="J. Okafor">J. Okafor</option>
-                  <option value="A. Brennan">A. Brennan</option>
-                  <option value="S. Patel">S. Patel</option>
+                  {FIRM_USERS.map((u) => (
+                    <option key={u.id} value={u.displayName}>{u.displayName} ({u.role})</option>
+                  ))}
                 </select>
               </div>
             </>
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-border flex items-center justify-between">
+        <div className="px-6 py-3.5 border-t border-border flex items-center justify-between shrink-0 bg-card">
           <button
             onClick={() => step > 1 ? setStep(step - 1) : onClose()}
             className="px-4 py-2 text-[13px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
@@ -1506,7 +2593,8 @@ function NewInvitationModal({
 
 // ─── Dashboard view ───────────────────────────────────────────────────────────
 
-function Dashboard() {
+function Dashboard({ onOpenApiKeyModal }: { onOpenApiKeyModal?: () => void } = {}) {
+  const { user } = useAuth();
   const [statusFilter, setStatusFilter] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("");
   const [channelFilter, setChannelFilter] = useState("");
@@ -1514,6 +2602,8 @@ function Dashboard() {
   const [viewMode, setViewMode] = useState<"All cases" | "My cases" | "Exceptions">("All cases");
   const [selectedCase, setSelectedCase] = useState<OnboardingCase | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [alertsCollapsed, setAlertsCollapsed] = useState(false);
+  const [showCharts, setShowCharts] = useState(false);
 
   const { data: casesPage, loading: casesLoading, error: casesError, refetch: refetchCases } = useApiData(
     () => casesApi.list({ status: statusFilter || undefined, search: search || undefined }),
@@ -1524,6 +2614,9 @@ function Dashboard() {
   const casesArr = casesPage?.items ?? CASES;
   const alertsArr = alertsData ?? ALERTS;
 
+  const currentUserName = user?.displayName ?? "J. Okafor";
+  const currentUserLastName = user?.lastName ?? "Okafor";
+
   const filteredCases = casesArr.filter((c) => {
     const matchStatus = !statusFilter || c.status === statusFilter;
     const matchOwner = !ownerFilter || c.owner === ownerFilter;
@@ -1533,7 +2626,7 @@ function Dashboard() {
       viewMode === "All cases"
         ? true
         : viewMode === "My cases"
-        ? c.owner === "J. Okafor"
+        ? c.owner === currentUserName || c.owner.includes(currentUserLastName)
         : alertsArr.some((a) => a.case === c.id);
     return matchStatus && matchOwner && matchChannel && matchSearch && matchView;
   });
@@ -1560,27 +2653,39 @@ function Dashboard() {
             refetchCases();
             setSelectedCase(updated);
           }}
+          onDeleteCase={() => {
+            refetchCases();
+            setSelectedCase(null);
+          }}
         />
       )}
 
       <div className="flex flex-col h-full overflow-hidden">
-        <Header onNewInvitation={() => setShowModal(true)} />
+        <Header onNewInvitation={() => setShowModal(true)} onOpenApiKeyModal={onOpenApiKeyModal} searchQuery={search} onSearchChange={setSearch} />
 
         <div className="flex-1 overflow-y-auto">
-          <div className="p-6 space-y-5 max-w-[1400px]">
+          <div className="p-3.5 sm:p-4 space-y-3 w-full">
             {/* Page title */}
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-[22px] font-bold text-foreground leading-tight">Start Dashboard</h1>
-                <p className="text-[13px] text-muted-foreground mt-0.5">29 July 2026 · Grow Advisory Group</p>
+                <h1 className="text-[18px] font-bold text-foreground leading-tight">Start Dashboard</h1>
+                <p className="text-[11px] text-muted-foreground mt-0.5">29 July 2026 · Grow Advisory Group</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[12px] text-muted-foreground">View:</span>
+                <button
+                  onClick={() => setShowCharts((s) => !s)}
+                  className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded border transition-colors ${showCharts ? "border-[#2855A6] bg-[#EEF2FA] text-[#2855A6]" : "border-border text-muted-foreground hover:text-foreground"}`}
+                  title="Toggle conversion funnel and metrics charts"
+                >
+                  <BarChart2 size={12} />
+                  {showCharts ? "Hide charts" : "Show charts"}
+                </button>
+                <span className="text-[11px] text-muted-foreground ml-1">View:</span>
                 {(["All cases", "My cases", "Exceptions"] as const).map((v) => (
                   <button
                     key={v}
                     onClick={() => setViewMode(v)}
-                    className={`px-3 py-1.5 text-[12px] font-medium rounded border transition-colors ${viewMode === v ? "border-[#2855A6] bg-[#EEF2FA] text-[#2855A6]" : "border-border text-muted-foreground hover:text-foreground"}`}
+                    className={`px-2.5 py-1 text-[11px] font-medium rounded border transition-colors ${viewMode === v ? "border-[#2855A6] bg-[#EEF2FA] text-[#2855A6]" : "border-border text-muted-foreground hover:text-foreground"}`}
                   >
                     {v}
                   </button>
@@ -1589,105 +2694,107 @@ function Dashboard() {
             </div>
 
             {/* Summary cards */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-4 gap-2.5">
               <SummaryCard
                 label="Active cases"
                 value={stats.active}
                 sub="this month"
-                icon={<Layers size={16} className="text-[#2855A6]" />}
+                icon={<Layers size={14} className="text-[#2855A6]" />}
                 accent="bg-[#EEF2FA]"
               />
               <SummaryCard
                 label="Overdue"
                 value={stats.overdue}
                 sub="need attention"
-                icon={<AlertTriangle size={16} className="text-[#F5A623]" />}
+                icon={<AlertTriangle size={14} className="text-[#F5A623]" />}
                 accent="bg-[#FEF6E9]"
               />
               <SummaryCard
                 label="Accepted this month"
                 value={stats.accepted}
                 sub="engagements"
-                icon={<CheckCircle size={16} className="text-[#2EA843]" />}
+                icon={<CheckCircle size={14} className="text-[#2EA843]" />}
                 accent="bg-[#E8F7EB]"
               />
               <SummaryCard
                 label="Open exceptions"
                 value={stats.exceptions}
                 sub="require review"
-                icon={<Shield size={16} className="text-[#D0021B]" />}
+                icon={<Shield size={14} className="text-[#D0021B]" />}
                 accent="bg-[#FCE8EB]"
               />
             </div>
 
             {/* Charts row */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* Funnel bar chart */}
-              <div className="bg-card border border-border rounded-lg p-5">
-                <h3 className="text-[13px] font-semibold text-foreground mb-4">Conversion funnel — July 2026</h3>
-                <div className="flex items-end gap-2 h-[120px]">
-                  {conversionData.map((d) => {
-                    const pct = Math.round((d.count / conversionData[0].count) * 100);
-                    return (
-                      <div key={d.stage} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
-                        <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity font-semibold">{d.count}</span>
-                        <div
-                          className="w-full rounded-t-[3px] bg-[#2855A6] transition-all"
-                          style={{ height: `${pct}%`, minHeight: 4 }}
-                        />
-                        <span className="text-[9px] text-muted-foreground text-center leading-tight whitespace-nowrap overflow-hidden">{d.stage}</span>
-                      </div>
-                    );
-                  })}
+            {showCharts && (
+              <div className="grid grid-cols-2 gap-3">
+                {/* Funnel bar chart */}
+                <div className="bg-card border border-border rounded-lg p-3">
+                  <h3 className="text-[11px] font-semibold text-foreground mb-2">Conversion funnel — July 2026</h3>
+                  <div className="flex items-end gap-2 h-[80px]">
+                    {conversionData.map((d) => {
+                      const pct = Math.round((d.count / conversionData[0].count) * 100);
+                      return (
+                        <div key={d.stage} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group">
+                          <span className="text-[9px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity font-semibold">{d.count}</span>
+                          <div
+                            className="w-full rounded-t-[3px] bg-[#2855A6] transition-all"
+                            style={{ height: `${pct}%`, minHeight: 4 }}
+                          />
+                          <span className="text-[8.5px] text-muted-foreground text-center leading-tight whitespace-nowrap overflow-hidden">{d.stage}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Trend line chart */}
+                <div className="bg-card border border-border rounded-lg p-3">
+                  <h3 className="text-[11px] font-semibold text-foreground mb-0.5">Median completion time (minutes)</h3>
+                  <p className="text-[9.5px] text-muted-foreground mb-1.5">Individual cases — last 6 weeks</p>
+                  <svg width="100%" height="76" viewBox="0 0 320 110" preserveAspectRatio="none">
+                    {[0, 1, 2, 3].map((i) => (
+                      <line key={i} x1="0" y1={i * 28} x2="320" y2={i * 28} stroke="#D1D1D1" strokeWidth="0.5" />
+                    ))}
+                    <path
+                      d={`M ${completionTrend.map((d, i) => {
+                        const x = (i / (completionTrend.length - 1)) * 300 + 10;
+                        const y = 90 - ((d.time - 8) / (22 - 8)) * 80;
+                        return `${x},${y}`;
+                      }).join(" L ")} L 310,90 L 10,90 Z`}
+                      fill="#20BCA4"
+                      fillOpacity="0.1"
+                    />
+                    <polyline
+                      points={completionTrend.map((d, i) => {
+                        const x = (i / (completionTrend.length - 1)) * 300 + 10;
+                        const y = 90 - ((d.time - 8) / (22 - 8)) * 80;
+                        return `${x},${y}`;
+                      }).join(" ")}
+                      fill="none"
+                      stroke="#20BCA4"
+                      strokeWidth="2"
+                      strokeLinejoin="round"
+                    />
+                    {completionTrend.map((d, i) => {
+                      const x = (i / (completionTrend.length - 1)) * 300 + 10;
+                      const y = 90 - ((d.time - 8) / (22 - 8)) * 80;
+                      return (
+                        <g key={d.week}>
+                          <circle cx={x} cy={y} r="3" fill="#20BCA4" />
+                          <text x={x} y="106" textAnchor="middle" fontSize="8.5" fill="#6F6F6F">{d.week}</text>
+                          <text x={x} y={y - 7} textAnchor="middle" fontSize="8.5" fill="#2E2E2E" fontWeight="600">{d.time}m</text>
+                        </g>
+                      );
+                    })}
+                  </svg>
                 </div>
               </div>
-
-              {/* Trend line chart */}
-              <div className="bg-card border border-border rounded-lg p-5">
-                <h3 className="text-[13px] font-semibold text-foreground mb-1">Median completion time (minutes)</h3>
-                <p className="text-[11px] text-muted-foreground mb-3">Individual cases — last 6 weeks</p>
-                <svg width="100%" height="110" viewBox="0 0 320 110" preserveAspectRatio="none">
-                  {[0, 1, 2, 3].map((i) => (
-                    <line key={i} x1="0" y1={i * 28} x2="320" y2={i * 28} stroke="#D1D1D1" strokeWidth="0.5" />
-                  ))}
-                  <path
-                    d={`M ${completionTrend.map((d, i) => {
-                      const x = (i / (completionTrend.length - 1)) * 300 + 10;
-                      const y = 90 - ((d.time - 8) / (22 - 8)) * 80;
-                      return `${x},${y}`;
-                    }).join(" L ")} L 310,90 L 10,90 Z`}
-                    fill="#20BCA4"
-                    fillOpacity="0.1"
-                  />
-                  <polyline
-                    points={completionTrend.map((d, i) => {
-                      const x = (i / (completionTrend.length - 1)) * 300 + 10;
-                      const y = 90 - ((d.time - 8) / (22 - 8)) * 80;
-                      return `${x},${y}`;
-                    }).join(" ")}
-                    fill="none"
-                    stroke="#20BCA4"
-                    strokeWidth="2"
-                    strokeLinejoin="round"
-                  />
-                  {completionTrend.map((d, i) => {
-                    const x = (i / (completionTrend.length - 1)) * 300 + 10;
-                    const y = 90 - ((d.time - 8) / (22 - 8)) * 80;
-                    return (
-                      <g key={d.week}>
-                        <circle cx={x} cy={y} r="3.5" fill="#20BCA4" />
-                        <text x={x} y="108" textAnchor="middle" fontSize="9" fill="#6F6F6F">{d.week}</text>
-                        <text x={x} y={y - 8} textAnchor="middle" fontSize="9" fill="#2E2E2E" fontWeight="600">{d.time}m</text>
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
-            </div>
+            )}
 
             {/* Main content: table + alert rail */}
-            <div className="flex gap-5 items-start">
-              <div className="flex-1 min-w-0 space-y-3">
+            <div className="flex gap-2.5 items-start">
+              <div className="flex-1 min-w-0 space-y-2.5">
                 <FilterBar
                   statusFilter={statusFilter}
                   setStatusFilter={setStatusFilter}
@@ -1703,13 +2810,15 @@ function Dashboard() {
                 {casesLoading ? (
                   <TableSkeleton rows={6} cols={8} />
                 ) : (
-                  <CasesTable cases={filteredCases} onSelect={setSelectedCase} />
+                  <CasesTable cases={filteredCases} onSelect={setSelectedCase} onRefresh={refetchCases} />
                 )}
               </div>
 
-              <div className="w-[280px] min-w-[280px]">
+              <div className={alertsCollapsed ? "w-8 shrink-0 transition-all" : "w-[150px] min-w-[150px] shrink-0 transition-all"}>
                 <ReviewAlertRail
                   alerts={alertsArr}
+                  collapsed={alertsCollapsed}
+                  onToggleCollapse={() => setAlertsCollapsed((c) => !c)}
                   onSelectCase={(caseId) => {
                     const target = casesArr.find((c) => c.id === caseId);
                     if (target) setSelectedCase(target);
@@ -1741,36 +2850,22 @@ function PageShell({
   children: React.ReactNode;
   onNewInvitation?: () => void;
 }) {
+  const nav = useNavigation();
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <header className="h-[52px] min-h-[52px] bg-card border-b border-border flex items-center px-6 gap-4">
-        <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-          {breadcrumb.map((b, i) => (
-            <span key={b} className="flex items-center gap-1.5">
-              {i > 0 && <ChevronRight size={12} />}
-              <span className={i === breadcrumb.length - 1 ? "text-foreground font-medium" : ""}>{b}</span>
-            </span>
-          ))}
-        </div>
-        <div className="flex-1" />
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input type="text" placeholder="Search…" className="w-[240px] pl-8 pr-4 py-1.5 text-[13px] bg-[#F5F5F5] border border-border rounded placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#2855A6]/30 focus:border-[#2855A6] transition-all" />
-        </div>
-        <button className="relative p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground"><Bell size={16} /><span className="absolute top-0.5 right-0.5 w-2 h-2 bg-[#D0021B] rounded-full" /></button>
-        {onNewInvitation && (
-          <button onClick={onNewInvitation} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] transition-colors">
-            <Plus size={14} />New invitation
-          </button>
-        )}
-      </header>
+      <Header
+        breadcrumb={breadcrumb}
+        onNewInvitation={onNewInvitation || nav?.openNewInvitation}
+        onOpenApiKeyModal={nav?.openApiKeyModal}
+      />
       <div className="flex-1 overflow-y-auto">
-        <div className="p-6 max-w-[1400px] space-y-5">
+        <div className="p-3.5 sm:p-4 space-y-3 w-full">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-[22px] font-bold text-foreground leading-tight">{title}</h1>
-              {subtitle && <p className="text-[13px] text-muted-foreground mt-0.5">{subtitle}</p>}
+              <h1 className="text-[18px] font-bold text-foreground leading-tight">{title}</h1>
+              {subtitle && <p className="text-[11px] text-muted-foreground mt-0.5">{subtitle}</p>}
             </div>
             {actions}
           </div>
@@ -1791,6 +2886,7 @@ function CasesScreen() {
   const [viewTab, setViewTab] = useState<"All" | "Active" | "Awaiting action" | "Completed">("All");
   const [selectedCase, setSelectedCase] = useState<OnboardingCase | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [stageFilter, setStageFilter] = useState<string | null>(null);
 
   const { data: page, loading, error, refetch } = useApiData(
     () => casesApi.list({ status: statusFilter || undefined, search: search || undefined }),
@@ -1815,7 +2911,7 @@ function CasesScreen() {
   });
 
   const handleExport = () => {
-    exportToCsv("onboarding_cases.csv", filtered as unknown as Record<string, unknown>[]);
+    exportToCsv("onboarding_pipeline.csv", filtered as unknown as Record<string, unknown>[]);
   };
 
   return (
@@ -1829,20 +2925,24 @@ function CasesScreen() {
             refetch();
             setSelectedCase(updated);
           }}
+          onDeleteCase={() => {
+            refetch();
+            setSelectedCase(null);
+          }}
         />
       )}
       <PageShell
-        title="Onboarding Cases"
-        subtitle="All active and completed cases · Grow Advisory Group"
-        breadcrumb={["EnTIQ", "Start", "Onboarding Cases"]}
+        title="Onboarding Pipeline (11 Stages)"
+        subtitle="11-Stage client intake, verification gateway and downstream practice handover"
+        breadcrumb={["EnTIQ", "Start", "Onboarding Pipeline"]}
         onNewInvitation={() => setShowModal(true)}
         actions={
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             {(["All", "Active", "Awaiting action", "Completed"] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setViewTab(v)}
-                className={`px-3 py-1.5 text-[12px] font-medium rounded border transition-colors ${viewTab === v ? "border-[#2855A6] bg-[#EEF2FA] text-[#2855A6]" : "border-border text-muted-foreground hover:text-foreground"}`}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded border transition-colors ${viewTab === v ? "border-[#2855A6] bg-[#EEF2FA] text-[#2855A6]" : "border-border text-muted-foreground hover:text-foreground"}`}
               >
                 {v}
               </button>
@@ -1850,18 +2950,40 @@ function CasesScreen() {
           </div>
         }
       >
+        {/* 11-Stage Pipeline Ribbon */}
+        <div className="bg-card border border-border rounded-lg p-2.5 overflow-x-auto">
+          <div className="flex items-center gap-1 min-w-[780px]">
+            {ONBOARDING_11_STAGES.map((s, idx) => (
+              <div key={s.id} className="flex items-center">
+                <div
+                  className="flex items-center gap-1 px-2 py-1 rounded bg-[#F8FAFF] border border-[#2855A6]/20 text-[10px] font-medium text-foreground whitespace-nowrap hover:bg-[#EEF2FA] transition-colors"
+                  title={`Stage ${s.step}: ${s.desc}`}
+                >
+                  <span className="w-4 h-4 rounded-full bg-[#2855A6] text-white flex items-center justify-center font-bold text-[8.5px]">
+                    {s.step}
+                  </span>
+                  <span>{s.label}</span>
+                </div>
+                {idx < ONBOARDING_11_STAGES.length - 1 && (
+                  <ChevronRight size={11} className="text-muted-foreground mx-0.5 shrink-0" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Stats strip */}
-        <div className="grid grid-cols-5 gap-3">
+        <div className="grid grid-cols-5 gap-2">
           {[
-            { label: "Total cases", value: loading ? "—" : allCases.length, color: "text-foreground" },
-            { label: "In progress", value: loading ? "—" : allCases.filter(c => ["In progress","Awaiting others"].includes(c.status)).length, color: "text-[#2855A6]" },
-            { label: "Awaiting review", value: loading ? "—" : allCases.filter(c => ["Internal review","Acceptance review","Submitted"].includes(c.status)).length, color: "text-[#F5A623]" },
-            { label: "Accepted", value: loading ? "—" : allCases.filter(c => c.status === "Accepted").length, color: "text-[#2EA843]" },
-            { label: "Rejected", value: loading ? "—" : allCases.filter(c => c.status === "Rejected").length, color: "text-[#D0021B]" },
+            { label: "Total in Pipeline", value: loading ? "—" : allCases.length, color: "text-foreground" },
+            { label: "Intake / In Progress", value: loading ? "—" : allCases.filter(c => ["In progress","Awaiting others"].includes(c.status)).length, color: "text-[#2855A6]" },
+            { label: "Stage 9/10 Verification", value: loading ? "—" : allCases.filter(c => ["Internal review","Acceptance review","Submitted"].includes(c.status)).length, color: "text-[#F5A623]" },
+            { label: "Stage 11 Activated", value: loading ? "—" : allCases.filter(c => c.status === "Accepted").length, color: "text-[#2EA843]" },
+            { label: "Rejected / Withdrawn", value: loading ? "—" : allCases.filter(c => c.status === "Rejected").length, color: "text-[#D0021B]" },
           ].map(s => (
-            <div key={s.label} className="bg-card border border-border rounded-lg px-4 py-3">
-              <div className="text-[11px] text-muted-foreground mb-1">{s.label}</div>
-              <div className={`text-[24px] font-bold ${s.color}`}>{s.value}</div>
+            <div key={s.label} className="bg-card border border-border rounded-lg px-2.5 py-1.5">
+              <div className="text-[9.5px] text-muted-foreground mb-0.5">{s.label}</div>
+              <div className={`text-[16px] font-bold ${s.color}`}>{s.value}</div>
             </div>
           ))}
         </div>
@@ -1878,7 +3000,7 @@ function CasesScreen() {
           onExport={handleExport}
         />
         {error && <ApiErrorBanner message={error} onRetry={refetch} />}
-        {loading ? <TableSkeleton rows={8} cols={9} /> : <CasesTable cases={filtered} onSelect={setSelectedCase} />}
+        {loading ? <TableSkeleton rows={8} cols={9} /> : <CasesTable cases={filtered} onSelect={setSelectedCase} onRefresh={refetch} />}
       </PageShell>
     </>
   );
@@ -1886,29 +3008,6 @@ function CasesScreen() {
 
 // ─── Invitations screen ───────────────────────────────────────────────────────
 
-const INVITATIONS = [
-  { id: "INV-2024-0120", client: "Manoj Kumar", email: "manoj@manojtech.com.au", service: "Company Tax + Advisory", channel: "Email", status: "Sent", sent: "Today", expires: "18 Sept", owner: "J. Okafor" },
-  { id: "INV-2024-0112", client: "Nguyen, Thanh", email: "thanh.nguyen@email.com", service: "Individual Tax", channel: "Email", status: "Sent", sent: "28 Jul", expires: "11 Aug", owner: "S. Patel" },
-  { id: "INV-2024-0111", client: "Riverside Developments Pty Ltd", email: "admin@riverside.com.au", service: "Company Tax + BAS", channel: "Email", status: "Opened", sent: "26 Jul", expires: "9 Aug", owner: "A. Brennan" },
-  { id: "INV-2024-0110", client: "Morrison, Claire", email: "claire.m@outlook.com", service: "Individual Tax", channel: "SMS + Email", status: "Started", sent: "24 Jul", expires: "7 Aug", owner: "J. Okafor" },
-  { id: "INV-2024-0109", client: "Sunfield Unit Trust", email: "trustee@sunfield.com.au", service: "Trust Tax", channel: "QR code", status: "Expired", sent: "10 Jul", expires: "24 Jul", owner: "S. Patel" },
-  { id: "INV-2024-0108", client: "Park, Ji-Woo", email: "jwpark@gmail.com", service: "Individual Tax", channel: "Email", status: "Sent", sent: "28 Jul", expires: "11 Aug", owner: "A. Brennan" },
-  { id: "INV-2024-0107", client: "Ashworth & Partners", email: "info@ashworth.net.au", service: "Partnership Tax", channel: "Email", status: "Completed", sent: "18 Jul", expires: "1 Aug", owner: "J. Okafor" },
-];
-
-function invStatusColor(s: string) {
-  const m: Record<string, string> = {
-    Sent: "bg-[#EEF2FA] text-[#2855A6]",
-    Opened: "bg-[#FEF6E9] text-[#B87A1A]",
-    Started: "bg-[#E3F0FB] text-[#1A5DA6]",
-    Expired: "bg-[#F0F0F0] text-[#6F6F6F]",
-    Completed: "bg-[#E8F7EB] text-[#1E7A31]",
-    Cancelled: "bg-[#FCE8EB] text-[#A80016]",
-  };
-  return m[s] ?? "bg-[#F0F0F0] text-[#6F6F6F]";
-}
-
-type InvitationRow = typeof INVITATIONS[0];
 
 function InvitationDetailDrawer({
   inv,
@@ -1933,7 +3032,7 @@ function InvitationDetailDrawer({
   };
 
   const handleCopyLink = () => {
-    const link = `https://start.entiq.com/invite/${inv.id}`;
+    const link = `${window.location.origin}/onboard?id=${inv.id}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(link);
     }
@@ -1942,17 +3041,50 @@ function InvitationDetailDrawer({
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const [testRecipient, setTestRecipient] = useState(inv.email);
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [testFeedback, setTestFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleSendTestToEmail = async () => {
+    if (!testRecipient.trim()) return;
+    setIsSendingTest(true);
+    setTestFeedback(null);
+    try {
+      const res: any = await invitationsApi.resend(inv.id, { toEmail: testRecipient.trim() });
+      if (res?.emailDelivered) {
+        setTestFeedback({ type: "success", text: `Delivered live email to ${testRecipient.trim()} via Amazon SES!` });
+        showToast(`Delivered to ${testRecipient.trim()}`);
+      } else {
+        setTestFeedback({ type: "success", text: `Invitation updated: ${res?.emailMessage || res?.message}` });
+        showToast(`Invitation sent`);
+      }
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      setTestFeedback({ type: "error", text: err?.message || "Failed to dispatch email" });
+    } finally {
+      setIsSendingTest(false);
+    }
+  };
+
+  const [resending, setResending] = useState(false);
   const handleResend = async () => {
-    await invitationsApi.resend(inv.id);
-    await activityApi.log({
-      time: "Just now",
-      actor: "J. Okafor",
-      action: "Resent invitation",
-      target: `${inv.id} · ${inv.client}`,
-      type: "invite",
-    });
-    showToast("Fresh invitation link sent to " + inv.email);
-    if (onUpdated) onUpdated();
+    setResending(true);
+    try {
+      const res: any = await invitationsApi.resend(inv.id);
+      await activityApi.log({
+        time: "Just now",
+        actor: "J. Okafor",
+        action: "Resent invitation",
+        target: `${inv.id} · ${inv.client} (${inv.email})`,
+        type: "invite",
+      });
+      showToast(res?.emailDelivered ? `Delivered via Amazon SES to ${inv.email}` : `Fresh link generated for ${inv.email}`);
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      showToast(err?.message || "Failed to resend invitation");
+    } finally {
+      setResending(false);
+    }
   };
 
   const handleCancel = async () => {
@@ -2032,6 +3164,46 @@ function InvitationDetailDrawer({
                 ))}
               </div>
 
+              {/* Send copy to my email */}
+              <div className="p-3.5 bg-[#EEF2FA] border border-[#2855A6]/25 rounded-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-semibold text-[#2855A6] flex items-center gap-1.5">
+                    <Mail size={14} /> Send this invitation to your email
+                  </span>
+                  <span className="text-[10px] bg-[#2855A6]/10 text-[#2855A6] font-semibold px-2 py-0.5 rounded">
+                    Amazon SES Live
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Dispatch this full client onboarding invitation email directly to your own inbox to inspect it.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={testRecipient}
+                    onChange={(e) => setTestRecipient(e.target.value)}
+                    placeholder="Enter your email address…"
+                    className="flex-1 px-3 py-1.5 text-[12px] bg-white border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#2855A6]"
+                  />
+                  <button
+                    type="button"
+                    disabled={isSendingTest || !testRecipient.trim()}
+                    onClick={handleSendTestToEmail}
+                    className="px-3.5 py-1.5 bg-[#2855A6] text-white text-[12px] font-semibold rounded hover:bg-[#1F4491] disabled:opacity-50 transition-colors flex items-center gap-1.5 shrink-0"
+                  >
+                    {isSendingTest ? "Sending…" : "Send to my email"}
+                  </button>
+                </div>
+                {testFeedback && (
+                  <div className={`text-[11px] font-medium p-2 rounded flex items-center gap-1.5 ${
+                    testFeedback.type === "success" ? "bg-[#E8F7EB] text-[#1E7A31]" : "bg-[#FCE8EB] text-[#D0021B]"
+                  }`}>
+                    {testFeedback.type === "success" ? <CheckCircle size={13} /> : <AlertTriangle size={13} />}
+                    {testFeedback.text}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <h3 className="text-[13px] font-semibold text-foreground mb-3">Invitation progress</h3>
                 <div className="space-y-0 divide-y divide-border border border-border rounded-lg overflow-hidden">
@@ -2099,6 +3271,16 @@ function InvitationDetailDrawer({
           >
             {copied ? "Copied!" : "Copy link"}
           </button>
+          <a
+            href={`/onboard?id=${inv.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="px-3 py-2 border border-border text-[13px] font-semibold rounded hover:bg-muted text-foreground transition-colors inline-flex items-center gap-1.5"
+            title="Open client onboarding page in new tab"
+          >
+            <ExternalLink size={13} />
+            Test onboarding
+          </a>
           <div className="flex-1" />
           {canCancel && (
             <button
@@ -2114,13 +3296,262 @@ function InvitationDetailDrawer({
   );
 }
 
+function EditInvitationModal({
+  inv,
+  onClose,
+  onSaved,
+}: {
+  inv: Invitation;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [client, setClient] = useState(inv.client);
+  const [email, setEmail] = useState(inv.email);
+  const [service, setService] = useState(inv.service);
+  const [channel, setChannel] = useState(inv.channel);
+  const [status, setStatus] = useState(inv.status);
+  const [expires, setExpires] = useState(inv.expires);
+  const [owner, setOwner] = useState(inv.owner);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!client.trim() || !email.trim()) {
+      setError("Client name and email are required");
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await invitationsApi.update(inv.id, {
+        client: client.trim(),
+        email: email.trim(),
+        service,
+        channel,
+        status,
+        expires,
+        owner,
+      });
+
+      await activityApi.log({
+        time: "Just now",
+        actor: owner,
+        action: "Updated invitation details",
+        target: `${inv.id} · ${client.trim()}`,
+        type: "invite",
+      });
+
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || "Failed to update invitation");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[520px] max-h-[90vh] overflow-y-auto rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-[16px] font-semibold text-foreground">Edit Invitation</h3>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Modify invitation parameters for <span className="font-mono text-[#2855A6] font-semibold">{inv.id}</span></p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><XCircle size={18} /></button>
+        </div>
+
+        {error && (
+          <div className="p-2.5 bg-[#FCE8EB] border border-[#D0021B]/30 rounded text-[12px] text-[#D0021B]">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-3 text-[13px]">
+          <div>
+            <label className="block font-medium text-foreground mb-1">Client Name *</label>
+            <input
+              value={client}
+              onChange={e => setClient(e.target.value)}
+              className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+            />
+          </div>
+
+          <div>
+            <label className="block font-medium text-foreground mb-1">Email Address *</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-foreground mb-1">Service</label>
+              <select
+                value={service}
+                onChange={e => setService(e.target.value)}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="Individual Tax Return">Individual Tax Return</option>
+                <option value="Company Tax + Advisory">Company Tax + Advisory</option>
+                <option value="Trust Tax Return">Trust Tax Return</option>
+                <option value="SMSF Administration">SMSF Administration</option>
+                <option value="BAS Preparation">BAS Preparation</option>
+                <option value="Business Advisory">Business Advisory</option>
+                <option value="Partnership Tax Return">Partnership Tax Return</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-medium text-foreground mb-1">Channel</label>
+              <select
+                value={channel}
+                onChange={e => setChannel(e.target.value)}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="Email">Email</option>
+                <option value="SMS link">SMS link</option>
+                <option value="QR code">QR code</option>
+                <option value="In-person tablet">In-person tablet</option>
+                <option value="Client portal">Client portal</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-foreground mb-1">Status</label>
+              <select
+                value={status}
+                onChange={e => setStatus(e.target.value)}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="Sent">Sent</option>
+                <option value="Opened">Opened</option>
+                <option value="Started">Started</option>
+                <option value="Completed">Completed</option>
+                <option value="Expired">Expired</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-medium text-foreground mb-1">Expires Date</label>
+              <input
+                value={expires}
+                onChange={e => setExpires(e.target.value)}
+                placeholder="e.g. 15 Aug"
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-medium text-foreground mb-1">Assigned Adviser</label>
+            <select
+              value={owner}
+              onChange={e => setOwner(e.target.value)}
+              className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+            >
+              <option value="J. Okafor">J. Okafor</option>
+              <option value="S. Patel">S. Patel</option>
+              <option value="A. Brennan">A. Brennan</option>
+              <option value="M. Chen">M. Chen</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-3 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">Cancel</button>
+          <button
+            disabled={isSubmitting || !client.trim() || !email.trim()}
+            onClick={handleSave}
+            className="px-5 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          >
+            {isSubmitting ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteInvitationModal({
+  inv,
+  onClose,
+  onDeleted,
+}: {
+  inv: Invitation;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await invitationsApi.delete(inv.id);
+      await activityApi.log({
+        time: "Just now",
+        actor: inv.owner,
+        action: "Deleted invitation",
+        target: `${inv.id} · ${inv.client}`,
+        type: "reject",
+      });
+      onDeleted();
+      onClose();
+    } catch {
+      onDeleted();
+      onClose();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[440px] rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#FCE8EB] text-[#D0021B] flex items-center justify-center shrink-0">
+            <Trash2 size={20} />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-semibold text-foreground">Delete Invitation?</h3>
+            <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
+              Are you sure you want to delete invitation <span className="font-mono text-[11px] font-semibold text-foreground">{inv.id}</span> for <strong>{inv.client}</strong> ({inv.email})? This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <button onClick={onClose} disabled={isDeleting} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="px-5 py-2 bg-[#D0021B] text-white text-[13px] font-semibold rounded hover:bg-[#B00216] disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          >
+            {isDeleting ? "Deleting…" : "Delete Invitation"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function InvitationsScreen() {
   const [showModal, setShowModal] = useState(false);
+  const [showEmailSettings, setShowEmailSettings] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [selectedInvitation, setSelectedInvitation] = useState<InvitationRow | null>(null);
+  const [editingInvitation, setEditingInvitation] = useState<Invitation | null>(null);
+  const [deletingInvitation, setDeletingInvitation] = useState<Invitation | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
+  const pageSize = 8;
 
   const { data: page, loading, error, refetch } = useApiData(
     () => invitationsApi.list({ search: search || undefined, status: statusFilter === "All" ? undefined : statusFilter }),
@@ -2150,6 +3581,27 @@ function InvitationsScreen() {
   return (
     <>
       {showModal && <NewInvitationModal onClose={() => setShowModal(false)} onCreated={() => { refetch(); }} />}
+      {showEmailSettings && (
+        <EmailSettingsModal
+          isOpen={showEmailSettings}
+          onClose={() => setShowEmailSettings(false)}
+          onSaved={() => { refetch(); }}
+        />
+      )}
+      {editingInvitation && (
+        <EditInvitationModal
+          inv={editingInvitation}
+          onClose={() => setEditingInvitation(null)}
+          onSaved={() => { refetch(); }}
+        />
+      )}
+      {deletingInvitation && (
+        <DeleteInvitationModal
+          inv={deletingInvitation}
+          onClose={() => setDeletingInvitation(null)}
+          onDeleted={() => { refetch(); }}
+        />
+      )}
       {selectedInvitation && (
         <InvitationDetailDrawer
           inv={selectedInvitation}
@@ -2163,45 +3615,58 @@ function InvitationsScreen() {
         breadcrumb={["EnTIQ", "Start", "Invitations"]}
         onNewInvitation={() => setShowModal(true)}
         actions={
-          <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] transition-colors">
-            <Plus size={14} />New invitation
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowEmailSettings(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border text-[13px] font-semibold rounded hover:bg-[#EEF2FA] text-[#2855A6] transition-colors shadow-sm"
+              title="Configure live outgoing SMTP server"
+            >
+              <Mail size={14} />
+              Email &amp; SMTP Settings
+            </button>
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] transition-colors"
+            >
+              <Plus size={14} />New invitation
+            </button>
+          </div>
         }
       >
         {/* Summary strip */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-4 gap-2">
           {[
-            { label: "Sent this month", value: sentCount, icon: <Inbox size={15} className="text-[#2855A6]" />, bg: "bg-[#EEF2FA]" },
-            { label: "Opened", value: openedCount, icon: <Eye size={15} className="text-[#F5A623]" />, bg: "bg-[#FEF6E9]" },
-            { label: "Started", value: startedCount, icon: <Clock size={15} className="text-[#2855A6]" />, bg: "bg-[#E3F0FB]" },
-            { label: "Expiring in 3 days", value: expiringCount, icon: <AlertTriangle size={15} className="text-[#D0021B]" />, bg: "bg-[#FCE8EB]" },
+            { label: "Sent this month", value: sentCount, icon: <Inbox size={13} className="text-[#2855A6]" />, bg: "bg-[#EEF2FA]" },
+            { label: "Opened", value: openedCount, icon: <Eye size={13} className="text-[#F5A623]" />, bg: "bg-[#FEF6E9]" },
+            { label: "Started", value: startedCount, icon: <Clock size={13} className="text-[#2855A6]" />, bg: "bg-[#E3F0FB]" },
+            { label: "Expiring in 3 days", value: expiringCount, icon: <AlertTriangle size={13} className="text-[#D0021B]" />, bg: "bg-[#FCE8EB]" },
           ].map(s => (
-            <div key={s.label} className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${s.bg}`}>{s.icon}</div>
+            <div key={s.label} className="bg-card border border-border rounded-lg px-2.5 py-1.5 flex items-center gap-2">
+              <div className={`p-1 rounded-md ${s.bg}`}>{s.icon}</div>
               <div>
-                <div className="text-[22px] font-bold text-foreground">{s.value}</div>
-                <div className="text-[11px] text-muted-foreground">{s.label}</div>
+                <div className="text-[15px] font-bold text-foreground leading-tight">{s.value}</div>
+                <div className="text-[9.5px] text-muted-foreground">{s.label}</div>
               </div>
             </div>
           ))}
         </div>
 
         {/* Filter */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               value={search}
               onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
               placeholder="Search client or email…"
-              className="pl-7 pr-3 py-1.5 text-[12px] bg-card border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] w-[220px] transition-all"
+              className="pl-7 pr-2.5 py-1 text-[11.5px] bg-card border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] w-[200px] transition-all"
             />
           </div>
           {["All", "Sent", "Opened", "Started", "Expired", "Completed"].map(s => (
             <button
               key={s}
               onClick={() => { setStatusFilter(s); setCurrentPage(1); }}
-              className={`px-3 py-1.5 text-[12px] border rounded transition-colors ${statusFilter === s ? "border-[#2855A6] bg-[#EEF2FA] text-[#2855A6] font-semibold" : "border-border text-muted-foreground hover:border-[#2855A6]/40 hover:text-[#2855A6]"}`}
+              className={`px-2.5 py-1 text-[11px] border rounded transition-colors ${statusFilter === s ? "border-[#2855A6] bg-[#EEF2FA] text-[#2855A6] font-semibold" : "border-border text-muted-foreground hover:border-[#2855A6]/40 hover:text-[#2855A6]"}`}
             >
               {s}
             </button>
@@ -2209,9 +3674,9 @@ function InvitationsScreen() {
           <div className="flex-1" />
           <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] text-muted-foreground border border-border rounded hover:bg-muted transition-colors"
+            className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-muted-foreground border border-border rounded hover:bg-muted transition-colors"
           >
-            <Download size={12} />Export
+            <Download size={11} />Export
           </button>
         </div>
 
@@ -2219,31 +3684,79 @@ function InvitationsScreen() {
 
         {/* Table */}
         {loading ? <TableSkeleton rows={6} cols={10} /> : (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <table className="w-full text-[12px]">
+        <div className="bg-card border border-border rounded-lg overflow-x-auto">
+          <table className="w-full text-[11px] min-w-[900px]">
             <thead>
               <tr className="border-b border-border bg-[#FAFAFA]">
-                {["Invitation ID", "Client", "Email", "Service", "Channel", "Status", "Sent", "Expires", "Owner", ""].map(h => (
-                  <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
+                {["Invitation ID", "Client", "Email", "Service", "Channel", "Status", "Sent", "Expires", "Owner", "Actions"].map((h, idx) => (
+                  <th key={h} className={`${idx === 9 ? "text-right pr-3" : "text-left"} px-2.5 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap`}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {displayedInvitations.map((inv, i) => (
                 <tr key={inv.id} onClick={() => setSelectedInvitation(inv)} className={`border-b border-border last:border-0 hover:bg-[#F8FAFF] cursor-pointer transition-colors ${i % 2 !== 0 ? "bg-[#FAFAFA]/50" : ""}`}>
-                  <td className="px-4 py-3"><span className="font-mono text-[11px] text-[#2855A6]">{inv.id}</span></td>
-                  <td className="px-4 py-3 font-medium text-foreground">{inv.client}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{inv.email}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{inv.service}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{inv.channel}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${invStatusColor(inv.status)}`}>{inv.status}</span>
+                  <td className="px-2.5 py-1.5 whitespace-nowrap"><span className="font-mono text-[10.5px] font-semibold text-[#2855A6]">{inv.id}</span></td>
+                  <td className="px-2.5 py-1.5 font-medium text-foreground max-w-[140px] truncate text-[11px]">{inv.client}</td>
+                  <td className="px-2.5 py-1.5 text-muted-foreground max-w-[160px] truncate text-[10.5px]">{inv.email}</td>
+                  <td className="px-2.5 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{inv.service}</td>
+                  <td className="px-2.5 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{inv.channel}</td>
+                  <td className="px-2.5 py-1.5 whitespace-nowrap">
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${invStatusColor(inv.status)}`}>{inv.status}</span>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{inv.sent}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{inv.expires}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{inv.owner}</td>
-                  <td className="px-4 py-3">
-                    <button onClick={e => { e.stopPropagation(); setSelectedInvitation(inv); }} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><MoreHorizontal size={14} /></button>
+                  <td className="px-2.5 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{inv.sent}</td>
+                  <td className="px-2.5 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{inv.expires}</td>
+                  <td className="px-2.5 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{inv.owner}</td>
+                  <td className="px-2.5 py-1.5 text-right relative pr-3" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(openMenuId === inv.id ? null : inv.id);
+                      }}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center justify-center"
+                      title="Actions"
+                    >
+                      <MoreHorizontal size={13} />
+                    </button>
+
+                    {openMenuId === inv.id && (
+                      <div
+                        onClick={e => e.stopPropagation()}
+                        className="absolute right-3 top-7 w-36 bg-card border border-border rounded-lg shadow-xl py-1 z-30 animate-in fade-in zoom-in-95 text-left"
+                      >
+                        <button
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            setSelectedInvitation(inv);
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-foreground hover:bg-[#EEF2FA] hover:text-[#2855A6] transition-colors"
+                        >
+                          <Eye size={12} className="text-[#2855A6]" />
+                          <span>View</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            setEditingInvitation(inv);
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-foreground hover:bg-[#FEF6E9] hover:text-[#B87A1A] transition-colors"
+                        >
+                          <Pencil size={12} className="text-[#F5A623]" />
+                          <span>Edit</span>
+                        </button>
+                        <div className="my-0.5 border-t border-border" />
+                        <button
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            setDeletingInvitation(inv);
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-[#D0021B] hover:bg-[#FCE8EB] transition-colors"
+                        >
+                          <Trash2 size={12} />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -2251,26 +3764,26 @@ function InvitationsScreen() {
           </table>
 
           {filtered.length === 0 && (
-            <div className="py-12 text-center text-[13px] text-muted-foreground">
+            <div className="py-8 text-center text-[12px] text-muted-foreground">
               No invitations match your filters.
             </div>
           )}
 
-          <div className="px-4 py-2.5 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
+          <div className="px-3 py-1.5 border-t border-border flex items-center justify-between text-[10px] text-muted-foreground">
             <span>{filtered.length} invitation{filtered.length !== 1 ? "s" : ""} shown</span>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <button
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                className="hover:text-foreground disabled:opacity-40"
+                className="hover:text-foreground disabled:opacity-40 font-medium"
               >
                 Previous
               </button>
-              <span className="px-2 py-0.5 bg-[#EEF2FA] text-[#2855A6] rounded font-semibold">{currentPage} / {totalPages}</span>
+              <span className="px-1.5 py-0.5 bg-[#EEF2FA] text-[#2855A6] rounded font-semibold">{currentPage} / {totalPages}</span>
               <button
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                className="hover:text-foreground disabled:opacity-40"
+                className="hover:text-foreground disabled:opacity-40 font-medium"
               >
                 Next
               </button>
@@ -2285,18 +3798,6 @@ function InvitationsScreen() {
 
 // ─── Clients & Entities screen ────────────────────────────────────────────────
 
-const CLIENTS_DATA = [
-  { id: "E-00890", name: "Manoj Tech Solutions Pty Ltd", type: "Company", abn: "88 923 104 551", acn: "923 104 551", status: "Active", verified: "Document", cases: 1, engagements: 1, added: "Aug 2026" },
-  { id: "P-00450", name: "Manoj Kumar", type: "Individual", abn: "", acn: "", status: "Active", verified: "Biometric (KYC)", cases: 1, engagements: 1, added: "Aug 2026" },
-  { id: "P-00441", name: "Harrington, Sophie", type: "Individual", abn: "", acn: "", status: "Active", verified: "Biometric (KYC)", cases: 1, engagements: 2, added: "Mar 2023" },
-  { id: "E-00882", name: "Northfield Holdings Pty Ltd", type: "Company", abn: "62 481 203 991", acn: "481 203 991", status: "Active", verified: "Document", cases: 1, engagements: 1, added: "Jan 2024" },
-  { id: "E-00881", name: "The Marcelline Family Trust", type: "Trust", abn: "51 204 771 003", acn: "", status: "Active", verified: "Manual", cases: 1, engagements: 1, added: "Jun 2023" },
-  { id: "P-00440", name: "Chen, David", type: "Individual", abn: "", acn: "", status: "Active", verified: "Document", cases: 1, engagements: 1, added: "Feb 2024" },
-  { id: "P-00439", name: "Liu, Wei", type: "Individual", abn: "", acn: "", status: "Active", verified: "Contact", cases: 1, engagements: 0, added: "Feb 2024" },
-  { id: "E-00880", name: "Apex Ventures Pty Ltd", type: "Company", abn: "77 340 918 200", acn: "340 918 200", status: "Active", verified: "Document", cases: 1, engagements: 0, added: "Jul 2024" },
-  { id: "E-00879", name: "Caldwell SMSF", type: "SMSF", abn: "39 204 881 772", acn: "", status: "Active", verified: "Document", cases: 1, engagements: 1, added: "Apr 2022" },
-  { id: "E-00878", name: "Greenbrook Unit Trust", type: "Trust", abn: "20 781 003 441", acn: "", status: "Active", verified: "Document", cases: 1, engagements: 1, added: "Nov 2021" },
-];
 
 function verifiedBadge(v: string) {
   const m: Record<string, string> = {
@@ -2309,22 +3810,54 @@ function verifiedBadge(v: string) {
   return m[v] ?? "bg-[#F0F0F0] text-[#6F6F6F]";
 }
 
+interface AdditionalCo {
+  id: string;
+  name: string;
+  role: string;
+  abn: string;
+  acn: string;
+}
+
 function AddEntityModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState("");
   const [type, setType] = useState("Individual");
   const [abn, setAbn] = useState("");
   const [acn, setAcn] = useState("");
   const [verified, setVerified] = useState("Document");
+  const [additionalCompanies, setAdditionalCompanies] = useState<AdditionalCo[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isCompanyOrTrust = type === "Company" || type === "Trust";
+
+  const addCompanyRow = () => {
+    setAdditionalCompanies(prev => [
+      ...prev,
+      {
+        id: `co_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: "",
+        role: type === "Trust" ? "Corporate Trustee" : "Subsidiary",
+        abn: "",
+        acn: "",
+      }
+    ]);
+  };
+
+  const removeCompanyRow = (id: string) => {
+    setAdditionalCompanies(prev => prev.filter(c => c.id !== id));
+  };
+
+  const updateCompanyRow = (id: string, field: keyof AdditionalCo, value: string) => {
+    setAdditionalCompanies(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
+  };
 
   const handleSave = async () => {
     if (!name.trim()) return;
     setIsSubmitting(true);
     try {
-      const newId = `${type === "Individual" ? "P" : "E"}-${Math.floor(Math.random() * 90000 + 10000)}`;
-      await clientsApi.create({
-        id: newId,
-        name,
+      const primaryId = `${type === "Individual" ? "P" : "E"}-${Math.floor(Math.random() * 90000 + 10000)}`;
+      const primaryClient: ClientEntity = {
+        id: primaryId,
+        name: name.trim(),
         type,
         abn,
         acn,
@@ -2332,14 +3865,46 @@ function AddEntityModal({ onClose, onCreated }: { onClose: () => void; onCreated
         cases: 0,
         engagements: 0,
         added: "Today",
-      });
+        status: "Active",
+      };
+
+      const validAddCos = isCompanyOrTrust
+        ? additionalCompanies.filter(c => c.name.trim().length > 0)
+        : [];
+
+      const additionalClients: ClientEntity[] = validAddCos.map((c, i) => ({
+        id: `E-${Math.floor(Math.random() * 90000 + 10000 + i)}`,
+        name: c.name.trim(),
+        type: "Company",
+        abn: c.abn || "",
+        acn: c.acn || "",
+        verified,
+        cases: 0,
+        engagements: 0,
+        added: "Today",
+        status: "Active",
+      }));
+
+      const allEntities = [primaryClient, ...additionalClients];
+
+      if (allEntities.length > 1) {
+        await clientsApi.createBatch(allEntities);
+      } else {
+        await clientsApi.create(primaryClient);
+      }
+
       await activityApi.log({
         time: "Just now",
         actor: "J. Okafor",
-        action: "Created entity record",
-        target: `${name} (${type})`,
+        action: additionalClients.length > 0
+          ? `Created ${type} and registered ${additionalClients.length} related companies`
+          : "Created entity record",
+        target: additionalClients.length > 0
+          ? `${name} (${type}) + ${additionalClients.map(c => c.name).join(", ")}`
+          : `${name} (${type})`,
         type: "client",
       });
+
       onCreated();
       onClose();
     } finally {
@@ -2348,20 +3913,25 @@ function AddEntityModal({ onClose, onCreated }: { onClose: () => void; onCreated
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-card w-[480px] rounded-xl p-6 shadow-2xl border border-border space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[520px] max-h-[90vh] overflow-y-auto rounded-xl p-6 shadow-2xl border border-border space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-[16px] font-semibold text-foreground">Add New Client or Entity</h3>
+          <div>
+            <h3 className="text-[16px] font-semibold text-foreground">Add New Client or Entity</h3>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Register entity structures into the practice directory</p>
+          </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><XCircle size={18} /></button>
         </div>
 
-        <div className="space-y-3 text-[13px]">
+        <div className="space-y-3.5 text-[13px]">
           <div>
-            <label className="block font-medium text-foreground mb-1">Legal Entity / Person Name *</label>
+            <label className="block font-medium text-foreground mb-1">
+              {type === "Trust" ? "Trust Legal Name *" : type === "Company" ? "Primary Company Legal Name *" : "Legal Entity / Person Name *"}
+            </label>
             <input
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="e.g. Apex Holdings Pty Ltd or John Smith"
+              placeholder={type === "Trust" ? "e.g. The Marcelline Family Trust" : type === "Company" ? "e.g. Northfield Holdings Pty Ltd" : "e.g. John Smith"}
               className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
             />
           </div>
@@ -2370,7 +3940,12 @@ function AddEntityModal({ onClose, onCreated }: { onClose: () => void; onCreated
             <label className="block font-medium text-foreground mb-1">Entity Structure</label>
             <select
               value={type}
-              onChange={e => setType(e.target.value)}
+              onChange={e => {
+                setType(e.target.value);
+                if (e.target.value !== "Company" && e.target.value !== "Trust") {
+                  setAdditionalCompanies([]);
+                }
+              }}
               className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
             >
               <option value="Individual">Individual</option>
@@ -2415,16 +3990,510 @@ function AddEntityModal({ onClose, onCreated }: { onClose: () => void; onCreated
               <option value="Contact">Contact Only</option>
             </select>
           </div>
+
+          {/* Multiple Companies Registration - ONLY for Company and Trust */}
+          {isCompanyOrTrust && (
+            <div className="pt-3 border-t border-border space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Building2 size={15} className="text-[#2855A6]" />
+                  <span className="text-[12px] font-semibold text-foreground">
+                    {type === "Trust" ? "Associated Companies / Corporate Trustee" : "Multiple Companies in Group"}
+                  </span>
+                  <span className="text-[10px] bg-[#EEF2FA] text-[#2855A6] font-semibold px-1.5 py-0.5 rounded">
+                    {type} only
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={addCompanyRow}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-[#2855A6] hover:text-[#1F4491] hover:underline"
+                >
+                  <Plus size={12} />
+                  Add Company
+                </button>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {type === "Trust"
+                  ? "You can register multiple companies under this trust (e.g. Corporate Trustee company, Operating company, or Beneficiary entities) together."
+                  : "You can register multiple subsidiary, sister, or holding companies under this corporate group together."}
+              </p>
+
+              {additionalCompanies.length === 0 ? (
+                <div className="p-3 bg-[#F9FAFC] border border-dashed border-border rounded-lg text-center">
+                  <p className="text-[11px] text-muted-foreground">No additional companies added to this {type.toLowerCase()}.</p>
+                  <button
+                    type="button"
+                    onClick={addCompanyRow}
+                    className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-[#2855A6] font-semibold hover:underline"
+                  >
+                    <Plus size={12} />
+                    {type === "Trust" ? "Add Corporate Trustee Company" : "Add Subsidiary / Group Company"}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                  {additionalCompanies.map((co, idx) => (
+                    <div key={co.id} className="p-3 bg-[#F9FAFC] border border-border rounded-lg space-y-2 relative">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-foreground flex items-center gap-1">
+                          <Building2 size={11} className="text-[#2855A6]" />
+                          Company #{idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeCompanyRow(co.id)}
+                          className="text-muted-foreground hover:text-[#D0021B] p-0.5 transition-colors"
+                          title="Remove company"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        <div>
+                          <input
+                            value={co.name}
+                            onChange={e => updateCompanyRow(co.id, "name", e.target.value)}
+                            placeholder="Company Legal Name * (e.g. Apex Trustee Pty Ltd)"
+                            className="w-full px-2.5 py-1.5 text-[12px] bg-white border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#2855A6]"
+                          />
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <select
+                              value={co.role}
+                              onChange={e => updateCompanyRow(co.id, "role", e.target.value)}
+                              className="w-full px-2 py-1.5 text-[11px] bg-white border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#2855A6]"
+                            >
+                              {type === "Trust" ? (
+                                <>
+                                  <option value="Corporate Trustee">Corporate Trustee</option>
+                                  <option value="Trading Entity">Trading Entity</option>
+                                  <option value="Beneficiary Co">Beneficiary Co</option>
+                                  <option value="Investment Entity">Investment Entity</option>
+                                </>
+                              ) : (
+                                <>
+                                  <option value="Subsidiary">Subsidiary</option>
+                                  <option value="Holding Company">Holding Company</option>
+                                  <option value="Operating Entity">Operating Entity</option>
+                                  <option value="Sister Company">Sister Company</option>
+                                </>
+                              )}
+                            </select>
+                          </div>
+                          <div>
+                            <input
+                              value={co.abn}
+                              onChange={e => updateCompanyRow(co.id, "abn", e.target.value)}
+                              placeholder="ABN"
+                              className="w-full px-2 py-1.5 text-[11px] bg-white border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#2855A6]"
+                            />
+                          </div>
+                          <div>
+                            <input
+                              value={co.acn}
+                              onChange={e => updateCompanyRow(co.id, "acn", e.target.value)}
+                              placeholder="ACN"
+                              className="w-full px-2 py-1.5 text-[11px] bg-white border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#2855A6]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+        <div className="flex justify-end gap-2 pt-3 border-t border-border">
           <button onClick={onClose} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">Cancel</button>
           <button
             disabled={isSubmitting || !name.trim()}
             onClick={handleSave}
-            className="px-5 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] disabled:opacity-40 transition-colors"
+            className="px-5 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] disabled:opacity-40 transition-colors flex items-center gap-1.5"
           >
-            {isSubmitting ? "Creating…" : "Create Entity"}
+            {isSubmitting ? "Creating…" : (
+              isCompanyOrTrust && additionalCompanies.filter(c => c.name.trim()).length > 0
+                ? `Create ${type} + ${additionalCompanies.filter(c => c.name.trim()).length} Companies`
+                : "Create Entity"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ViewEntityModal({
+  client,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  client: ClientEntity;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 1800);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[520px] max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl border border-border flex flex-col animate-in fade-in zoom-in-95">
+        {/* Header */}
+        <div className="px-6 py-5 border-b border-border flex items-start justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[#EEF2FA] text-[#2855A6] flex items-center justify-center font-bold text-[14px]">
+              {client.type === "Individual" ? <UserCheck size={20} /> : <Building2 size={20} />}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-[16px] font-semibold text-foreground">{client.name}</h3>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${verifiedBadge(client.verified)}`}>
+                  {client.verified}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="font-mono text-[11px] text-[#2855A6] font-semibold">{client.id}</span>
+                <span className="text-[11px] text-muted-foreground">· {client.type}</span>
+                <span className="text-[11px] text-muted-foreground">· Added {client.added}</span>
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><XCircle size={18} /></button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4 text-[12px]">
+          {/* Key Properties Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 bg-[#F9FAFC] border border-border rounded-lg">
+              <span className="text-[11px] text-muted-foreground block mb-0.5">Entity Type</span>
+              <span className="font-semibold text-foreground text-[13px]">{client.type}</span>
+            </div>
+            <div className="p-3 bg-[#F9FAFC] border border-border rounded-lg">
+              <span className="text-[11px] text-muted-foreground block mb-0.5">Status</span>
+              <span className="font-semibold text-[#1E7A31] text-[13px] inline-flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-[#2EA843]" />
+                {client.status || "Active"}
+              </span>
+            </div>
+            <div className="p-3 bg-[#F9FAFC] border border-border rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground block mb-0.5">ABN</span>
+                {client.abn && (
+                  <button
+                    onClick={() => copyToClipboard(client.abn!, "abn")}
+                    className="text-[10px] text-[#2855A6] hover:underline flex items-center gap-0.5"
+                  >
+                    {copied === "abn" ? <CheckCircle size={10} className="text-[#2EA843]" /> : <Copy size={10} />}
+                    {copied === "abn" ? "Copied" : "Copy"}
+                  </button>
+                )}
+              </div>
+              <span className="font-mono font-medium text-foreground text-[12px]">{client.abn || "—"}</span>
+            </div>
+            <div className="p-3 bg-[#F9FAFC] border border-border rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground block mb-0.5">ACN</span>
+                {client.acn && (
+                  <button
+                    onClick={() => copyToClipboard(client.acn!, "acn")}
+                    className="text-[10px] text-[#2855A6] hover:underline flex items-center gap-0.5"
+                  >
+                    {copied === "acn" ? <CheckCircle size={10} className="text-[#2EA843]" /> : <Copy size={10} />}
+                    {copied === "acn" ? "Copied" : "Copy"}
+                  </button>
+                )}
+              </div>
+              <span className="font-mono font-medium text-foreground text-[12px]">{client.acn || "—"}</span>
+            </div>
+          </div>
+
+          {/* Activity summary */}
+          <div className="p-3.5 border border-border rounded-lg bg-card space-y-2">
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Practice Activity</span>
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-[#EEF2FA] text-[#2855A6]"><Layers size={16} /></div>
+                <div>
+                  <div className="text-[18px] font-bold text-foreground leading-tight">{client.cases ?? 0}</div>
+                  <div className="text-[11px] text-muted-foreground">Active Onboarding Cases</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-[#E8F7EB] text-[#2EA843]"><FileText size={16} /></div>
+                <div>
+                  <div className="text-[18px] font-bold text-foreground leading-tight">{client.engagements ?? 0}</div>
+                  <div className="text-[11px] text-muted-foreground">Signed Engagements</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-muted-foreground">
+            Verification status: <strong>{client.verified}</strong>. Recorded in practice directory with identifier <code className="font-mono text-[#2855A6] bg-[#EEF2FA] px-1 py-0.5 rounded">{client.id}</code>.
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-border flex items-center justify-between shrink-0 bg-[#FAFAFA]">
+          <button
+            onClick={onDelete}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-[#D0021B] hover:bg-[#FCE8EB] rounded transition-colors"
+          >
+            <Trash2 size={13} />Delete
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-3.5 py-1.5 text-[12px] text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              Close
+            </button>
+            <button
+              onClick={onEdit}
+              className="flex items-center gap-1.5 px-4 py-1.5 bg-[#2855A6] text-white text-[12px] font-semibold rounded hover:bg-[#1F4491] transition-colors"
+            >
+              <Pencil size={12} />Edit Entity
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditEntityModal({
+  client,
+  onClose,
+  onSaved,
+}: {
+  client: ClientEntity;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(client.name);
+  const [type, setType] = useState(client.type);
+  const [abn, setAbn] = useState(client.abn || "");
+  const [acn, setAcn] = useState(client.acn || "");
+  const [verified, setVerified] = useState(client.verified || "Document");
+  const [status, setStatus] = useState(client.status || "Active");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      setError("Legal name is required");
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await clientsApi.update(client.id, {
+        name: name.trim(),
+        type,
+        abn: abn.trim(),
+        acn: acn.trim(),
+        verified,
+        status,
+      });
+
+      await activityApi.log({
+        time: "Just now",
+        actor: "J. Okafor",
+        action: "Updated client entity",
+        target: `${client.id} · ${name.trim()}`,
+        type: "client",
+      });
+
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || "Failed to update client entity");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[520px] max-h-[90vh] overflow-y-auto rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-[16px] font-semibold text-foreground">Edit Client / Entity</h3>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Update entity details for {client.id}</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><XCircle size={18} /></button>
+        </div>
+
+        {error && (
+          <div className="p-2.5 bg-[#FCE8EB] border border-[#D0021B]/30 rounded text-[12px] text-[#D0021B]">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-3.5 text-[13px]">
+          <div>
+            <label className="block font-medium text-foreground mb-1">Legal / Display Name *</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-foreground mb-1">Entity Structure</label>
+              <select
+                value={type}
+                onChange={e => setType(e.target.value)}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="Individual">Individual</option>
+                <option value="Company">Company</option>
+                <option value="Trust">Trust</option>
+                <option value="SMSF">SMSF</option>
+                <option value="Partnership">Partnership</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-medium text-foreground mb-1">Status</label>
+              <select
+                value={status}
+                onChange={e => setStatus(e.target.value)}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+                <option value="Archived">Archived</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-foreground mb-1">ABN</label>
+              <input
+                value={abn}
+                onChange={e => setAbn(e.target.value)}
+                placeholder="11-digit ABN"
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              />
+            </div>
+            <div>
+              <label className="block font-medium text-foreground mb-1">ACN</label>
+              <input
+                value={acn}
+                onChange={e => setAcn(e.target.value)}
+                placeholder="9-digit ACN"
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-medium text-foreground mb-1">Verification Level</label>
+            <select
+              value={verified}
+              onChange={e => setVerified(e.target.value)}
+              className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+            >
+              <option value="Biometric (KYC)">Biometric (KYC)</option>
+              <option value="Document">Document Verified</option>
+              <option value="Manual">Manual Review</option>
+              <option value="Contact">Contact Only</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-3 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">Cancel</button>
+          <button
+            disabled={isSubmitting || !name.trim()}
+            onClick={handleSave}
+            className="px-5 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          >
+            {isSubmitting ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteEntityModal({
+  client,
+  onClose,
+  onDeleted,
+}: {
+  client: ClientEntity;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await clientsApi.delete(client.id);
+      await activityApi.log({
+        time: "Just now",
+        actor: "J. Okafor",
+        action: "Deleted client entity",
+        target: `${client.id} · ${client.name}`,
+        type: "client",
+      });
+      onDeleted();
+      onClose();
+    } catch {
+      onDeleted();
+      onClose();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[440px] rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#FCE8EB] text-[#D0021B] flex items-center justify-center shrink-0">
+            <Trash2 size={20} />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-semibold text-foreground">Delete Client Entity?</h3>
+            <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
+              Are you sure you want to delete <strong>{client.name}</strong> (<span className="font-mono text-[11px]">{client.id}</span>)? This entity will be removed from your practice directory.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <button
+            onClick={onClose}
+            disabled={isDeleting}
+            className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="px-4 py-2 bg-[#D0021B] text-white text-[13px] font-semibold rounded hover:bg-[#B00217] transition-colors flex items-center gap-1.5 disabled:opacity-50"
+          >
+            {isDeleting ? "Deleting…" : "Delete Entity"}
           </button>
         </div>
       </div>
@@ -2438,7 +4507,19 @@ function ClientsScreen() {
   const [verificationFilter, setVerificationFilter] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
+  const pageSize = 8;
+
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [viewingClient, setViewingClient] = useState<ClientEntity | null>(null);
+  const [editingClient, setEditingClient] = useState<ClientEntity | null>(null);
+  const [deletingClient, setDeletingClient] = useState<ClientEntity | null>(null);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handleWindowClick = () => setOpenMenuId(null);
+    window.addEventListener("click", handleWindowClick);
+    return () => window.removeEventListener("click", handleWindowClick);
+  }, [openMenuId]);
 
   const { data: page, loading, error, refetch } = useApiData(
     () => clientsApi.list({ search: search || undefined, type: typeFilter || undefined }),
@@ -2463,6 +4544,40 @@ function ClientsScreen() {
   return (
     <>
       {showAddModal && <AddEntityModal onClose={() => setShowAddModal(false)} onCreated={() => { refetch(); }} />}
+      {viewingClient && (
+        <ViewEntityModal
+          client={viewingClient}
+          onClose={() => setViewingClient(null)}
+          onEdit={() => {
+            const target = viewingClient;
+            setViewingClient(null);
+            setEditingClient(target);
+          }}
+          onDelete={() => {
+            const target = viewingClient;
+            setViewingClient(null);
+            setDeletingClient(target);
+          }}
+        />
+      )}
+      {editingClient && (
+        <EditEntityModal
+          client={editingClient}
+          onClose={() => setEditingClient(null)}
+          onSaved={() => {
+            refetch();
+          }}
+        />
+      )}
+      {deletingClient && (
+        <DeleteEntityModal
+          client={deletingClient}
+          onClose={() => setDeletingClient(null)}
+          onDeleted={() => {
+            refetch();
+          }}
+        />
+      )}
       <PageShell
         title="Clients & Entities"
         subtitle="All persons, companies, trusts and other entities"
@@ -2477,31 +4592,31 @@ function ClientsScreen() {
         }
       >
         {/* Type tabs */}
-        <div className="flex gap-1 p-1 bg-card border border-border rounded-lg w-fit">
+        <div className="flex gap-1 p-0.5 bg-card border border-border rounded-lg w-fit">
           {["All types", "Individual", "Company", "Trust", "SMSF", "Partnership"].map(t => (
             <button
               key={t}
               onClick={() => { setTypeFilter(t === "All types" ? "" : t); setCurrentPage(1); }}
-              className={`px-3 py-1.5 text-[12px] font-medium rounded transition-colors ${(t === "All types" && !typeFilter) || typeFilter === t ? "bg-[#2855A6] text-white" : "text-muted-foreground hover:text-foreground"}`}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors ${(t === "All types" && !typeFilter) || typeFilter === t ? "bg-[#2855A6] text-white" : "text-muted-foreground hover:text-foreground"}`}
             >{t}</button>
           ))}
         </div>
 
         {/* Search + filter */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               value={search}
               onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
               placeholder="Search name, ABN or ACN…"
-              className="pl-7 pr-3 py-1.5 text-[12px] bg-card border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] w-[240px] transition-all"
+              className="pl-7 pr-2.5 py-1 text-[11.5px] bg-card border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] w-[220px] transition-all"
             />
           </div>
           <select
             value={verificationFilter}
             onChange={e => { setVerificationFilter(e.target.value); setCurrentPage(1); }}
-            className="text-[12px] border border-border rounded px-2.5 py-1.5 bg-card focus:outline-none appearance-none pr-7 cursor-pointer"
+            className="text-[11.5px] border border-border rounded px-2.5 py-1 bg-card focus:outline-none appearance-none pr-7 cursor-pointer"
             style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236F6F6F' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center" }}
           >
             <option value="">All verification levels</option>
@@ -2513,9 +4628,9 @@ function ClientsScreen() {
           <div className="flex-1" />
           <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] text-muted-foreground border border-border rounded hover:bg-muted transition-colors"
+            className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-muted-foreground border border-border rounded hover:bg-muted transition-colors"
           >
-            <Download size={12} />Export
+            <Download size={11} />Export
           </button>
         </div>
 
@@ -2523,55 +4638,109 @@ function ClientsScreen() {
 
         {/* Table */}
         {loading ? <TableSkeleton rows={8} cols={9} /> : (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <table className="w-full text-[12px]">
+        <div className="bg-card border border-border rounded-lg overflow-visible">
+          <table className="w-full text-[11px]">
             <thead>
               <tr className="border-b border-border bg-[#FAFAFA]">
                 {["ID", "Name", "Type", "ABN / ACN", "Verification", "Active cases", "Engagements", "Added", ""].map(h => (
-                  <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
+                  <th key={h} className="text-left px-2.5 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {displayedClients.map((c, i) => (
-                <tr key={c.id} className={`border-b border-border last:border-0 hover:bg-[#F8FAFF] cursor-pointer transition-colors ${i % 2 !== 0 ? "bg-[#FAFAFA]/50" : ""}`}>
-                  <td className="px-4 py-3"><span className="font-mono text-[11px] text-[#2855A6]">{c.id}</span></td>
-                  <td className="px-4 py-3 font-medium text-foreground">{c.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{c.type}</td>
-                  <td className="px-4 py-3 text-muted-foreground font-mono text-[11px]">{c.abn || c.acn || "—"}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${verifiedBadge(c.verified)}`}>{c.verified}</span>
+                <tr
+                  key={c.id}
+                  onClick={() => setViewingClient(c)}
+                  className={`border-b border-border last:border-0 hover:bg-[#F8FAFF] cursor-pointer transition-colors ${i % 2 !== 0 ? "bg-[#FAFAFA]/50" : ""}`}
+                >
+                  <td className="px-2.5 py-1.5 whitespace-nowrap"><span className="font-mono text-[10.5px] text-[#2855A6] font-semibold">{c.id}</span></td>
+                  <td className="px-2.5 py-1.5 font-medium text-foreground text-[11px]">{c.name}</td>
+                  <td className="px-2.5 py-1.5 text-muted-foreground text-[10.5px]">{c.type}</td>
+                  <td className="px-2.5 py-1.5 text-muted-foreground font-mono text-[10.5px]">{c.abn || c.acn || "—"}</td>
+                  <td className="px-2.5 py-1.5 whitespace-nowrap">
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${verifiedBadge(c.verified)}`}>{c.verified}</span>
                   </td>
-                  <td className="px-4 py-3 text-center text-muted-foreground">{c.cases}</td>
-                  <td className="px-4 py-3 text-center text-muted-foreground">{c.engagements}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{c.added}</td>
-                  <td className="px-4 py-3"><button className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><MoreHorizontal size={14} /></button></td>
+                  <td className="px-2.5 py-1.5 text-center text-muted-foreground text-[10.5px]">{c.cases}</td>
+                  <td className="px-2.5 py-1.5 text-center text-muted-foreground text-[10.5px]">{c.engagements}</td>
+                  <td className="px-2.5 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{c.added}</td>
+                  <td className="px-2.5 py-1.5 relative text-right pr-2" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(openMenuId === c.id ? null : c.id);
+                      }}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center justify-center"
+                      title="Actions"
+                    >
+                      <MoreHorizontal size={13} />
+                    </button>
+
+                    {openMenuId === c.id && (
+                      <div
+                        onClick={e => e.stopPropagation()}
+                        className="absolute right-2 top-7 w-36 bg-card border border-border rounded-lg shadow-xl py-1 z-30 animate-in fade-in zoom-in-95 text-left"
+                      >
+                        <button
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            setViewingClient(c);
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-foreground hover:bg-[#EEF2FA] hover:text-[#2855A6] transition-colors"
+                        >
+                          <Eye size={12} className="text-[#2855A6]" />
+                          <span>View</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            setEditingClient(c);
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-foreground hover:bg-[#FEF6E9] hover:text-[#B87A1A] transition-colors"
+                        >
+                          <Pencil size={12} className="text-[#F5A623]" />
+                          <span>Edit</span>
+                        </button>
+                        <div className="my-0.5 border-t border-border" />
+                        <button
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            setDeletingClient(c);
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-[#D0021B] hover:bg-[#FCE8EB] transition-colors"
+                        >
+                          <Trash2 size={12} />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
 
           {filtered.length === 0 && (
-            <div className="py-12 text-center text-[13px] text-muted-foreground">
+            <div className="py-8 text-center text-[12px] text-muted-foreground">
               No clients match your filter criteria.
             </div>
           )}
 
-          <div className="px-4 py-2.5 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
+          <div className="px-3 py-1.5 border-t border-border flex items-center justify-between text-[10px] text-muted-foreground">
             <span>{filtered.length} records shown</span>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <button
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                className="hover:text-foreground disabled:opacity-40"
+                className="hover:text-foreground disabled:opacity-40 font-medium"
               >
                 Previous
               </button>
-              <span className="px-2 py-0.5 bg-[#EEF2FA] text-[#2855A6] rounded font-semibold">{currentPage} / {totalPages}</span>
+              <span className="px-1.5 py-0.5 bg-[#EEF2FA] text-[#2855A6] rounded font-semibold">{currentPage} / {totalPages}</span>
               <button
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                className="hover:text-foreground disabled:opacity-40"
+                className="hover:text-foreground disabled:opacity-40 font-medium"
               >
                 Next
               </button>
@@ -2602,18 +4771,47 @@ function fmtFee(amount: number, freq: string) {
   return `${f} ${freqLabel[freq] ?? freq}`.trim();
 }
 
+type EngagementDraftService = {
+  name: string;
+  fee: number;
+  freq: string;
+  gst: boolean;
+  scope: string;
+  feeOverride: string;
+  companyMode?: "single" | "multiple";
+  companyCount?: number;
+  companyNames?: string[];
+  pricingModel?: "group_addon" | "multiplier";
+};
+
 type EngagementDraft = {
   clientId: string;
   clientName: string;
   clientType: string;
   adviserId: string;
   adviserName: string;
-  services: { name: string; fee: number; freq: string; gst: boolean; scope: string; feeOverride: string }[];
+  services: EngagementDraftService[];
   startDate: string;
   renewalDate: string;
   deliveryMethod: "esign" | "manual";
   notes: string;
 };
+
+function computeCompanyTaxFee(baseAmount: number, mode: "single" | "multiple", count: number, pricingModel: "group_addon" | "multiplier") {
+  if (mode === "single" || count <= 1) return baseAmount;
+  if (pricingModel === "multiplier") {
+    return baseAmount * count;
+  }
+  // Standard ATO group add-on: base $3,850 + $550 per additional entity in group
+  return baseAmount + (count - 1) * 550;
+}
+
+function getServiceDisplayName(s: EngagementDraftService): string {
+  if (s.name === "Company Tax Return" && s.companyMode === "multiple" && (s.companyCount || 1) > 1) {
+    return `Company Tax Return (${s.companyCount} Companies)`;
+  }
+  return s.name;
+}
 
 type BillingFreq = "Monthly" | "Quarterly" | "Annual" | "Job-based" | "On completion" | "Weekly" | "Fortnightly";
 
@@ -2680,14 +4878,21 @@ function NewEngagementModal({ onClose, onCreated }: { onClose: () => void; onCre
       clientId,
       clientName: c.name,
       clientType: c.type,
-      services: relevantFees.map(f => ({
-        name: f.service,
-        fee: f.amount,
-        freq: f.frequency,
-        gst: f.gst,
-        scope: "",
-        feeOverride: "",
-      })),
+      services: relevantFees.map(f => {
+        const isCompanyTax = f.service === "Company Tax Return";
+        return {
+          name: f.service,
+          fee: f.amount,
+          freq: f.frequency,
+          gst: f.gst,
+          scope: isCompanyTax ? "Single entity — Turnover < $5M" : "",
+          feeOverride: "",
+          companyMode: isCompanyTax ? ("single" as const) : undefined,
+          companyCount: isCompanyTax ? 1 : undefined,
+          companyNames: isCompanyTax ? [c.name] : undefined,
+          pricingModel: isCompanyTax ? ("group_addon" as const) : undefined,
+        };
+      }),
     }));
   };
 
@@ -2696,11 +4901,23 @@ function NewEngagementModal({ onClose, onCreated }: { onClose: () => void; onCre
       const exists = d.services.find(s => s.name === svcName);
       if (exists) return { ...d, services: d.services.filter(s => s.name !== svcName) };
       const fee = INITIAL_FEES.find(f => f.service === svcName);
+      const isCompanyTax = svcName === "Company Tax Return";
       return {
         ...d,
         services: [
           ...d.services,
-          { name: svcName, fee: fee?.amount ?? 0, freq: fee?.frequency ?? "Annual", gst: fee?.gst ?? true, scope: fee?.notes ?? "", feeOverride: "" },
+          {
+            name: svcName,
+            fee: fee?.amount ?? 0,
+            freq: fee?.frequency ?? "Annual",
+            gst: fee?.gst ?? true,
+            scope: isCompanyTax ? "Single entity — Turnover < $5M" : (fee?.notes ?? ""),
+            feeOverride: "",
+            companyMode: isCompanyTax ? ("single" as const) : undefined,
+            companyCount: isCompanyTax ? 1 : undefined,
+            companyNames: isCompanyTax ? [d.clientName || "Company 1"] : undefined,
+            pricingModel: isCompanyTax ? ("group_addon" as const) : undefined,
+          },
         ],
       };
     });
@@ -2708,7 +4925,7 @@ function NewEngagementModal({ onClose, onCreated }: { onClose: () => void; onCre
 
   const totalFeeNote = () => {
     const annualised = draft.services.reduce((sum, s) => {
-      const amt = parseFloat(s.feeOverride) || s.fee;
+      const amt = (s.feeOverride && !isNaN(parseFloat(s.feeOverride))) ? parseFloat(s.feeOverride) : s.fee;
       if (s.freq === "Annual") return sum + amt;
       if (s.freq === "Monthly") return sum + amt * 12;
       if (s.freq === "Quarterly") return sum + amt * 4;
@@ -2720,9 +4937,9 @@ function NewEngagementModal({ onClose, onCreated }: { onClose: () => void; onCre
   const issueDate = new Date().toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
 
   const handleIssue = async () => {
-    const serviceLabel = draft.services.map(s => s.name).join(" + ");
+    const serviceLabel = draft.services.map(s => getServiceDisplayName(s)).join(" + ");
     const totalAnnual = draft.services.reduce((sum, s) => {
-      const amt = parseFloat(s.feeOverride) || s.fee;
+      const amt = (s.feeOverride && !isNaN(parseFloat(s.feeOverride))) ? parseFloat(s.feeOverride) : s.fee;
       if (s.freq === "Annual") return sum + amt;
       if (s.freq === "Monthly") return sum + amt * 12;
       if (s.freq === "Quarterly") return sum + amt * 4;
@@ -2750,8 +4967,8 @@ function NewEngagementModal({ onClose, onCreated }: { onClose: () => void; onCre
     step === 3 || step === 4 || step === 5;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-card w-[680px] max-h-[90vh] rounded-xl shadow-2xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-card w-full max-w-[680px] max-h-[min(90vh,780px)] rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col my-auto">
         {/* Header */}
         <div className="px-6 py-5 border-b border-border flex items-start justify-between shrink-0">
           <div>
@@ -2846,16 +5063,359 @@ function NewEngagementModal({ onClose, onCreated }: { onClose: () => void; onCre
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-[13px] font-semibold text-foreground">{fee.service}</span>
-                              <span className="text-[11px] font-semibold text-[#2855A6]">{fmtFee(fee.amount, fee.frequency)}</span>
+                              <span className="text-[13px] font-semibold text-foreground">{selected ? getServiceDisplayName(selected) : fee.service}</span>
+                              <span className="text-[11px] font-semibold text-[#2855A6]">{selected ? fmtFee(selected.fee, selected.freq) : fmtFee(fee.amount, fee.frequency)}</span>
                               {fee.gst && <span className="text-[10px] text-muted-foreground">+ GST</span>}
                             </div>
                             {fee.notes && <div className="text-[11px] text-muted-foreground mt-0.5">{fee.notes}</div>}
                           </div>
                         </div>
                         {selected && (
-                          <div className="px-4 pb-3 pt-0 border-t border-[#2855A6]/10 space-y-2 mt-0">
-                            <div className="grid grid-cols-2 gap-2 pt-2">
+                          <div className="px-4 pb-3 pt-0 border-t border-[#2855A6]/10 space-y-3 mt-0">
+                            {/* Special Single vs Multiple Companies Option for Company Tax Return */}
+                            {fee.service === "Company Tax Return" && (
+                              <div className="pt-2.5 space-y-3">
+                                <div>
+                                  <label className="text-[11px] font-semibold text-foreground uppercase tracking-wide block mb-1.5">
+                                    Entity Structure Option
+                                  </label>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setDraft(d => ({
+                                          ...d,
+                                          services: d.services.map(s => {
+                                            if (s.name !== fee.service) return s;
+                                            return {
+                                              ...s,
+                                              companyMode: "single",
+                                              companyCount: 1,
+                                              fee: fee.amount,
+                                              scope: s.scope && !s.scope.includes("group companies") ? s.scope : "Single entity — Turnover < $5M",
+                                            };
+                                          }),
+                                        }));
+                                      }}
+                                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
+                                        (!selected.companyMode || selected.companyMode === "single")
+                                          ? "border-[#2855A6] bg-[#2855A6]/5 ring-1 ring-[#2855A6]"
+                                          : "border-border bg-white hover:bg-muted/40"
+                                      }`}
+                                    >
+                                      <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                        (!selected.companyMode || selected.companyMode === "single")
+                                          ? "border-[#2855A6] bg-[#2855A6]"
+                                          : "border-gray-300 bg-white"
+                                      }`}>
+                                        {(!selected.companyMode || selected.companyMode === "single") && (
+                                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                                        )}
+                                      </div>
+                                      <div>
+                                        <div className="text-[12px] font-semibold text-foreground">Single Company</div>
+                                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                                          1 standalone company · standard base fee ({fmtFee(fee.amount, fee.frequency)})
+                                        </div>
+                                      </div>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const count = selected.companyCount && selected.companyCount > 1 ? selected.companyCount : 2;
+                                        const pricingModel = selected.pricingModel || "group_addon";
+                                        const newFee = computeCompanyTaxFee(fee.amount, "multiple", count, pricingModel);
+                                        const initialNames = (selected.companyNames && selected.companyNames.length >= count)
+                                          ? selected.companyNames
+                                          : [draft.clientName || "Company 1", ...Array.from({ length: count - 1 }, (_, i) => `Group Entity ${i + 2} Pty Ltd`)];
+                                        setDraft(d => ({
+                                          ...d,
+                                          services: d.services.map(s => {
+                                            if (s.name !== fee.service) return s;
+                                            return {
+                                              ...s,
+                                              companyMode: "multiple",
+                                              companyCount: count,
+                                              companyNames: initialNames,
+                                              pricingModel,
+                                              fee: newFee,
+                                              scope: `Includes ${count} group companies: ${initialNames.filter(Boolean).join(", ")}`,
+                                            };
+                                          }),
+                                        }));
+                                      }}
+                                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
+                                        selected.companyMode === "multiple"
+                                          ? "border-[#2855A6] bg-[#2855A6]/5 ring-1 ring-[#2855A6]"
+                                          : "border-border bg-white hover:bg-muted/40"
+                                      }`}
+                                    >
+                                      <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                        selected.companyMode === "multiple"
+                                          ? "border-[#2855A6] bg-[#2855A6]"
+                                          : "border-gray-300 bg-white"
+                                      }`}>
+                                        {selected.companyMode === "multiple" && (
+                                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                                        )}
+                                      </div>
+                                      <div>
+                                        <div className="text-[12px] font-semibold text-foreground flex items-center gap-1.5">
+                                          <span>Multiple Companies</span>
+                                          <span className="px-1.5 py-0.2 bg-[#FEF6E9] text-[#B87A1A] border border-[#F5A623]/30 rounded text-[9px] font-bold uppercase">
+                                            Group
+                                          </span>
+                                        </div>
+                                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                                          Corporate group · 2+ entities (from $4,400 pa)
+                                        </div>
+                                      </div>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {selected.companyMode === "multiple" && (
+                                  <div className="p-3 bg-white rounded-lg border border-[#2855A6]/20 space-y-3">
+                                    {/* Count Selector & Quick Chips */}
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <div>
+                                        <label className="text-[11px] font-semibold text-foreground block">
+                                          Number of Companies in Group
+                                        </label>
+                                        <span className="text-[10px] text-muted-foreground">Select total entities to include</span>
+                                      </div>
+
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex items-center border border-border rounded bg-[#F5F5F5] overflow-hidden">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const newCount = Math.max(2, (selected.companyCount || 2) - 1);
+                                              const pricingModel = selected.pricingModel || "group_addon";
+                                              const newFee = computeCompanyTaxFee(fee.amount, "multiple", newCount, pricingModel);
+                                              const names = (selected.companyNames || []).slice(0, newCount);
+                                              setDraft(d => ({
+                                                ...d,
+                                                services: d.services.map(s => {
+                                                  if (s.name !== fee.service) return s;
+                                                  return {
+                                                    ...s,
+                                                    companyCount: newCount,
+                                                    companyNames: names,
+                                                    fee: newFee,
+                                                    scope: `Includes ${newCount} group companies: ${names.filter(Boolean).join(", ")}`,
+                                                  };
+                                                }),
+                                              }));
+                                            }}
+                                            disabled={(selected.companyCount || 2) <= 2}
+                                            className="w-7 h-7 flex items-center justify-center hover:bg-muted disabled:opacity-30 text-foreground transition-colors"
+                                          >
+                                            <Minus size={13} />
+                                          </button>
+                                          <span className="w-8 text-center text-[12px] font-bold text-foreground">
+                                            {selected.companyCount || 2}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const newCount = Math.min(20, (selected.companyCount || 2) + 1);
+                                              const pricingModel = selected.pricingModel || "group_addon";
+                                              const newFee = computeCompanyTaxFee(fee.amount, "multiple", newCount, pricingModel);
+                                              const names = [...(selected.companyNames || [])];
+                                              while (names.length < newCount) {
+                                                names.push(`Group Entity ${names.length + 1} Pty Ltd`);
+                                              }
+                                              setDraft(d => ({
+                                                ...d,
+                                                services: d.services.map(s => {
+                                                  if (s.name !== fee.service) return s;
+                                                  return {
+                                                    ...s,
+                                                    companyCount: newCount,
+                                                    companyNames: names,
+                                                    fee: newFee,
+                                                    scope: `Includes ${newCount} group companies: ${names.filter(Boolean).join(", ")}`,
+                                                  };
+                                                }),
+                                              }));
+                                            }}
+                                            className="w-7 h-7 flex items-center justify-center hover:bg-muted text-foreground transition-colors"
+                                          >
+                                            <Plus size={13} />
+                                          </button>
+                                        </div>
+
+                                        <div className="flex items-center gap-1">
+                                          {[2, 3, 4, 5].map(cnt => (
+                                            <button
+                                              key={cnt}
+                                              type="button"
+                                              onClick={() => {
+                                                const pricingModel = selected.pricingModel || "group_addon";
+                                                const newFee = computeCompanyTaxFee(fee.amount, "multiple", cnt, pricingModel);
+                                                const names = [...(selected.companyNames || [])].slice(0, cnt);
+                                                while (names.length < cnt) {
+                                                  names.push(`Group Entity ${names.length + 1} Pty Ltd`);
+                                                }
+                                                setDraft(d => ({
+                                                  ...d,
+                                                  services: d.services.map(s => {
+                                                    if (s.name !== fee.service) return s;
+                                                    return {
+                                                      ...s,
+                                                      companyCount: cnt,
+                                                      companyNames: names,
+                                                      fee: newFee,
+                                                      scope: `Includes ${cnt} group companies: ${names.filter(Boolean).join(", ")}`,
+                                                    };
+                                                  }),
+                                                }));
+                                              }}
+                                              className={`px-2 py-0.5 text-[11px] rounded font-medium transition-colors ${
+                                                (selected.companyCount || 2) === cnt
+                                                  ? "bg-[#2855A6] text-white"
+                                                  : "bg-[#F5F5F5] hover:bg-muted text-muted-foreground"
+                                              }`}
+                                            >
+                                              {cnt} Co
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Pricing Formula */}
+                                    <div>
+                                      <label className="text-[11px] font-semibold text-foreground block mb-1.5">
+                                        Pricing Calculation Method
+                                      </label>
+                                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                                        <label className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-all ${
+                                          (!selected.pricingModel || selected.pricingModel === "group_addon")
+                                            ? "border-[#2855A6] bg-[#EEF2FA]/50"
+                                            : "border-border bg-white"
+                                        }`}>
+                                          <input
+                                            type="radio"
+                                            name="pricingModel"
+                                            checked={!selected.pricingModel || selected.pricingModel === "group_addon"}
+                                            onChange={() => {
+                                              const count = selected.companyCount || 2;
+                                              const newFee = computeCompanyTaxFee(fee.amount, "multiple", count, "group_addon");
+                                              setDraft(d => ({
+                                                ...d,
+                                                services: d.services.map(s => s.name === fee.service ? { ...s, pricingModel: "group_addon", fee: newFee } : s),
+                                              }));
+                                            }}
+                                            className="mt-0.5 accent-[#2855A6]"
+                                          />
+                                          <div>
+                                            <span className="font-semibold text-foreground block">Group Add-on Rate</span>
+                                            <span className="text-muted-foreground text-[10px]">
+                                              $3,850 base + $550/extra entity
+                                            </span>
+                                            <div className="font-bold text-[#2855A6] mt-0.5">
+                                              ${(3850 + ((selected.companyCount || 2) - 1) * 550).toLocaleString("en-AU")} pa
+                                            </div>
+                                          </div>
+                                        </label>
+
+                                        <label className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-all ${
+                                          selected.pricingModel === "multiplier"
+                                            ? "border-[#2855A6] bg-[#EEF2FA]/50"
+                                            : "border-border bg-white"
+                                        }`}>
+                                          <input
+                                            type="radio"
+                                            name="pricingModel"
+                                            checked={selected.pricingModel === "multiplier"}
+                                            onChange={() => {
+                                              const count = selected.companyCount || 2;
+                                              const newFee = computeCompanyTaxFee(fee.amount, "multiple", count, "multiplier");
+                                              setDraft(d => ({
+                                                ...d,
+                                                services: d.services.map(s => s.name === fee.service ? { ...s, pricingModel: "multiplier", fee: newFee } : s),
+                                              }));
+                                            }}
+                                            className="mt-0.5 accent-[#2855A6]"
+                                          />
+                                          <div>
+                                            <span className="font-semibold text-foreground block">Full Entity Rate</span>
+                                            <span className="text-muted-foreground text-[10px]">
+                                              $3,850 × {selected.companyCount || 2} entities
+                                            </span>
+                                            <div className="font-bold text-[#2855A6] mt-0.5">
+                                              ${(3850 * (selected.companyCount || 2)).toLocaleString("en-AU")} pa
+                                            </div>
+                                          </div>
+                                        </label>
+                                      </div>
+                                    </div>
+
+                                    {/* Company Entity Names */}
+                                    <div>
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <label className="text-[11px] font-semibold text-foreground">
+                                          Group Company Names ({selected.companyCount || 2})
+                                        </label>
+                                        <span className="text-[10px] text-muted-foreground">Appears in Engagement Letter</span>
+                                      </div>
+                                      <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                                        {Array.from({ length: selected.companyCount || 2 }).map((_, idx) => {
+                                          const currentName = (selected.companyNames && selected.companyNames[idx]) || "";
+                                          return (
+                                            <div key={idx} className="flex items-center gap-2">
+                                              <span className="text-[10px] font-mono font-semibold text-muted-foreground w-12 shrink-0">
+                                                {idx === 0 ? "Holding" : `Co ${idx + 1}`}:
+                                              </span>
+                                              <input
+                                                type="text"
+                                                value={currentName}
+                                                placeholder={idx === 0 ? (draft.clientName || "Parent Company Pty Ltd") : `Subsidiary ${idx + 1} Pty Ltd`}
+                                                onChange={e => {
+                                                  const updated = [...(selected.companyNames || [])];
+                                                  while (updated.length <= idx) updated.push("");
+                                                  updated[idx] = e.target.value;
+                                                  setDraft(d => ({
+                                                    ...d,
+                                                    services: d.services.map(s => {
+                                                      if (s.name !== fee.service) return s;
+                                                      return {
+                                                        ...s,
+                                                        companyNames: updated,
+                                                        scope: `Includes ${s.companyCount || 2} group companies: ${updated.filter(Boolean).join(", ")}`,
+                                                      };
+                                                    }),
+                                                  }));
+                                                }}
+                                                className="flex-1 px-2.5 py-1 text-[11px] bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#2855A6]/30 focus:border-[#2855A6]"
+                                              />
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+
+                                    {/* Calculation Summary Pill */}
+                                    <div className="p-2 bg-[#EEF2FA] rounded border border-[#2855A6]/20 flex items-center justify-between text-[11px]">
+                                      <span className="text-[#2855A6] font-medium">
+                                        {selected.pricingModel === "multiplier"
+                                          ? `${selected.companyCount || 2} companies × $3,850 base`
+                                          : `$3,850 (Base) + ${((selected.companyCount || 2) - 1)} × $550 (Add-on)`}
+                                      </span>
+                                      <span className="font-bold text-[#2855A6]">
+                                        = ${computeCompanyTaxFee(fee.amount, "multiple", selected.companyCount || 2, selected.pricingModel || "group_addon").toLocaleString("en-AU")} pa (excl. GST)
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Standard Fee Override and Scope inputs */}
+                            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/60">
                               <div>
                                 <label className="text-[11px] font-semibold text-muted-foreground block mb-1">Fee override (blank = standard)</label>
                                 <div className="relative">
@@ -2864,7 +5424,7 @@ function NewEngagementModal({ onClose, onCreated }: { onClose: () => void; onCre
                                     type="number"
                                     value={selected.feeOverride}
                                     onChange={e => setDraft(d => ({ ...d, services: d.services.map(s => s.name === fee.service ? { ...s, feeOverride: e.target.value } : s) }))}
-                                    placeholder={fee.amount.toString()}
+                                    placeholder={selected.fee.toString()}
                                     className="w-full pl-6 pr-3 py-1.5 text-[12px] bg-white border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#2855A6]/30 focus:border-[#2855A6]"
                                   />
                                 </div>
@@ -2875,7 +5435,7 @@ function NewEngagementModal({ onClose, onCreated }: { onClose: () => void; onCre
                                   type="text"
                                   value={selected.scope}
                                   onChange={e => setDraft(d => ({ ...d, services: d.services.map(s => s.name === fee.service ? { ...s, scope: e.target.value } : s) }))}
-                                  placeholder="e.g. includes 1 rental property"
+                                  placeholder={fee.service === "Company Tax Return" && selected.companyMode === "multiple" ? "Group companies scope" : "e.g. includes 1 rental property"}
                                   className="w-full px-3 py-1.5 text-[12px] bg-white border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#2855A6]/30 focus:border-[#2855A6]"
                                 />
                               </div>
@@ -3130,10 +5690,18 @@ function NewEngagementModal({ onClose, onCreated }: { onClose: () => void; onCre
                         <tbody>
                           {draft.services.map(s => (
                             <tr key={s.name} className="border-b border-border last:border-0">
-                              <td className="px-4 py-2.5 font-medium">{s.name}</td>
+                              <td className="px-4 py-2.5 font-medium">
+                                <div>{getServiceDisplayName(s)}</div>
+                                {s.companyMode === "multiple" && s.companyNames && s.companyNames.filter(Boolean).length > 0 && (
+                                  <div className="text-[11px] text-muted-foreground font-normal mt-0.5">
+                                    <span className="font-medium text-[#2855A6]">Group Entities ({s.companyCount || 2}):</span>{" "}
+                                    {s.companyNames.filter(Boolean).join(", ")}
+                                  </div>
+                                )}
+                              </td>
                               <td className="px-4 py-2.5 text-muted-foreground">{s.scope || INITIAL_FEES.find(f => f.service === s.name)?.notes || "Standard scope"}</td>
                               <td className="px-4 py-2.5 text-right font-semibold">
-                                {new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(parseFloat(s.feeOverride) || s.fee)}
+                                {new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format((s.feeOverride && !isNaN(parseFloat(s.feeOverride))) ? parseFloat(s.feeOverride) : s.fee)}
                               </td>
                               <td className="px-4 py-2.5 text-muted-foreground">{s.freq}</td>
                             </tr>
@@ -3568,7 +6136,7 @@ function EngagementFullPage({
             )}
 
             <div className="bg-card border border-border rounded-lg overflow-hidden">
-              <div className="px-5 py-3 border-b border-border bg-[#FAFAFA]">
+              <div className="px-4 py-2 border-b border-border bg-[#FAFAFA]">
                 <span className="text-[12px] font-semibold text-foreground">Engagement terms</span>
               </div>
               <div className="divide-y divide-border">
@@ -3579,7 +6147,7 @@ function EngagementFullPage({
                   { label: "Practice acceptance", value: currentEng.status === "Active" ? "Accepted" : "Pending", done: currentEng.status === "Active" },
                   { label: "Next renewal", value: currentEng.renewalDue || "Not set", done: false },
                 ].map(item => (
-                  <div key={item.label} className="flex items-center gap-4 px-5 py-3">
+                  <div key={item.label} className="flex items-center gap-4 px-4 py-2.5">
                     {item.done
                       ? <CheckCircle size={14} className="text-[#2EA843] shrink-0" />
                       : <Clock size={14} className="text-[#F5A623] shrink-0" />}
@@ -3591,10 +6159,10 @@ function EngagementFullPage({
             </div>
 
             <div className="bg-card border border-border rounded-lg overflow-hidden">
-              <div className="px-5 py-3 border-b border-border bg-[#FAFAFA] flex items-center justify-between">
+              <div className="px-4 py-2 border-b border-border bg-[#FAFAFA] flex items-center justify-between">
                 <span className="text-[12px] font-semibold text-foreground">Linked onboarding case</span>
               </div>
-              <div className="px-5 py-4 text-[12px] text-muted-foreground">
+              <div className="px-4 py-3 text-[12px] text-muted-foreground">
                 This engagement was created from an onboarding case. Historical case records are preserved in the system vault.
               </div>
             </div>
@@ -3602,9 +6170,9 @@ function EngagementFullPage({
         )}
 
         {tab === "Services" && (
-          <div className="max-w-[760px] space-y-6">
+          <div className="max-w-[760px] space-y-4">
             <div className="bg-card border border-border rounded-lg overflow-hidden">
-              <div className="px-5 py-3 border-b border-border bg-[#FAFAFA] flex items-center justify-between">
+              <div className="px-4 py-2 border-b border-border bg-[#FAFAFA] flex items-center justify-between">
                 <span className="text-[12px] font-semibold text-foreground">Included services</span>
                 <span className="text-[11px] text-muted-foreground">Scope as agreed in letter of engagement</span>
               </div>
@@ -3612,22 +6180,22 @@ function EngagementFullPage({
                 {[
                   { name: currentEng.service, fee: currentEng.fee, frequency: "Annual", status: "Active" },
                 ].map((svc, i) => (
-                  <div key={i} className="px-5 py-4 flex items-center gap-4">
-                    <div className="w-8 h-8 rounded-lg bg-[#EEF2FA] flex items-center justify-center shrink-0">
-                      <FileText size={14} className="text-[#2855A6]" />
+                  <div key={i} className="px-4 py-2.5 flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-md bg-[#EEF2FA] flex items-center justify-center shrink-0">
+                      <FileText size={13} className="text-[#2855A6]" />
                     </div>
                     <div className="flex-1">
-                      <div className="text-[13px] font-semibold text-foreground">{svc.name}</div>
-                      <div className="text-[11px] text-muted-foreground mt-0.5">{svc.frequency} engagement · {svc.fee}</div>
+                      <div className="text-[12px] font-semibold text-foreground">{svc.name}</div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">{svc.frequency} engagement · {svc.fee}</div>
                     </div>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#E8F7EB] text-[#1E7A31]">{svc.status}</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-[#E8F7EB] text-[#1E7A31]">{svc.status}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="bg-card border border-border rounded-lg overflow-hidden">
-              <div className="px-5 py-3 border-b border-border bg-[#FAFAFA]">
+              <div className="px-4 py-2 border-b border-border bg-[#FAFAFA]">
                 <span className="text-[12px] font-semibold text-foreground">Fee schedule</span>
               </div>
               <div className="divide-y divide-border">
@@ -3637,7 +6205,7 @@ function EngagementFullPage({
                   { label: "Payment method", value: "Direct debit via Square" },
                   { label: "GST", value: "Included" },
                 ].map(({ label, value }) => (
-                  <div key={label} className="flex items-center px-5 py-3">
+                  <div key={label} className="flex items-center px-4 py-2.5">
                     <span className="text-[12px] text-muted-foreground w-[220px] shrink-0">{label}</span>
                     <span className="text-[12px] font-medium text-foreground">{value}</span>
                   </div>
@@ -3646,7 +6214,7 @@ function EngagementFullPage({
             </div>
 
             <div className="bg-card border border-border rounded-lg overflow-hidden">
-              <div className="px-5 py-3 border-b border-border bg-[#FAFAFA] flex items-center justify-between">
+              <div className="px-4 py-2 border-b border-border bg-[#FAFAFA] flex items-center justify-between">
                 <span className="text-[12px] font-semibold text-foreground">Out-of-scope work ({variations.length})</span>
                 <button
                   onClick={() => setShowAddVariation(true)}
@@ -3656,13 +6224,13 @@ function EngagementFullPage({
                 </button>
               </div>
               {variations.length === 0 ? (
-                <div className="px-5 py-6 text-center text-[12px] text-muted-foreground">
+                <div className="px-4 py-4 text-center text-[12px] text-muted-foreground">
                   No out-of-scope variations recorded for this engagement.
                 </div>
               ) : (
                 <div className="divide-y divide-border">
                   {variations.map((v, i) => (
-                    <div key={i} className="px-5 py-3 flex items-center justify-between text-[12px]">
+                    <div key={i} className="px-4 py-2.5 flex items-center justify-between text-[12px]">
                       <div>
                         <div className="font-semibold text-foreground">{v.name}</div>
                         <div className="text-[11px] text-muted-foreground">{v.date}</div>
@@ -4014,6 +6582,275 @@ function EngagementDetailDrawer({
   );
 }
 
+function EditEngagementModal({
+  eng,
+  onClose,
+  onSaved,
+}: {
+  eng: EngagementRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [client, setClient] = useState(eng.client);
+  const [service, setService] = useState(eng.service);
+  const [fee, setFee] = useState(eng.fee);
+  const [status, setStatus] = useState(eng.status);
+  const [renewalDue, setRenewalDue] = useState(eng.renewalDue || "");
+  const [adviser, setAdviser] = useState(eng.adviser);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!client.trim() || !service.trim()) {
+      setError("Client name and service title are required");
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await engagementsApi.update(eng.id, {
+        client: client.trim(),
+        service: service.trim(),
+        fee: fee.trim(),
+        status,
+        renewal_due: renewalDue.trim(),
+        adviser,
+      });
+
+      await activityApi.log({
+        time: "Just now",
+        actor: adviser,
+        action: "Updated engagement details",
+        target: `${eng.id} · ${client.trim()}`,
+        type: "proposal",
+      });
+
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || "Failed to update engagement");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[520px] max-h-[90vh] overflow-y-auto rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-[16px] font-semibold text-foreground">Edit Engagement</h3>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Modify contract details for <span className="font-mono text-[#2855A6] font-semibold">{eng.id}</span></p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><XCircle size={18} /></button>
+        </div>
+
+        {error && (
+          <div className="p-2.5 bg-[#FCE8EB] border border-[#D0021B]/30 rounded text-[12px] text-[#D0021B]">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-3 text-[13px]">
+          <div>
+            <label className="block font-medium text-foreground mb-1">Client Name *</label>
+            <input
+              value={client}
+              onChange={e => setClient(e.target.value)}
+              className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+            />
+          </div>
+
+          <div>
+            <label className="block font-medium text-foreground mb-1">Service Title *</label>
+            <input
+              value={service}
+              onChange={e => setService(e.target.value)}
+              className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+            />
+          </div>
+
+          {service.toLowerCase().includes("company") && (
+            <div className="p-3 bg-[#EEF2FA]/60 border border-[#2855A6]/20 rounded-lg space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-[#2855A6] flex items-center gap-1.5">
+                  <Building2 size={13} />
+                  Company Tax Return Structure
+                </span>
+                <span className="text-[10px] text-muted-foreground">Click below to auto-calculate</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setService("Company Tax Return");
+                    setFee("$3,850 pa");
+                  }}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded border transition-colors ${
+                    service === "Company Tax Return"
+                      ? "bg-[#2855A6] text-white border-[#2855A6]"
+                      : "bg-white text-[#2855A6] border-[#2855A6]/30 hover:bg-[#EEF2FA]"
+                  }`}
+                >
+                  Single Company ($3,850 pa)
+                </button>
+                {[2, 3, 4, 5].map(cnt => {
+                  const targetTitle = `Company Tax Return (${cnt} Companies)`;
+                  const calcFee = 3850 + (cnt - 1) * 550;
+                  const isSelected = service.includes(`${cnt} Companies`);
+                  return (
+                    <button
+                      key={cnt}
+                      type="button"
+                      onClick={() => {
+                        setService(targetTitle);
+                        setFee(`$${calcFee.toLocaleString("en-AU")} pa`);
+                      }}
+                      className={`px-2.5 py-1 text-[11px] font-medium rounded border transition-colors ${
+                        isSelected
+                          ? "bg-[#2855A6] text-white border-[#2855A6]"
+                          : "bg-white text-[#2855A6] border-[#2855A6]/30 hover:bg-[#EEF2FA]"
+                      }`}
+                    >
+                      {cnt} Companies (${calcFee.toLocaleString("en-AU")})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-foreground mb-1">Annual Fee</label>
+              <input
+                value={fee}
+                onChange={e => setFee(e.target.value)}
+                placeholder="e.g. $4,500 pa"
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              />
+            </div>
+            <div>
+              <label className="block font-medium text-foreground mb-1">Status</label>
+              <select
+                value={status}
+                onChange={e => setStatus(e.target.value as any)}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="Active">Active</option>
+                <option value="Renewal due">Renewal due</option>
+                <option value="Proposal issued">Proposal issued</option>
+                <option value="Review needed">Review needed</option>
+                <option value="Expired">Expired</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-foreground mb-1">Renewal Due Date</label>
+              <input
+                value={renewalDue}
+                onChange={e => setRenewalDue(e.target.value)}
+                placeholder="e.g. 15 Aug 2025"
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              />
+            </div>
+            <div>
+              <label className="block font-medium text-foreground mb-1">Assigned Adviser</label>
+              <select
+                value={adviser}
+                onChange={e => setAdviser(e.target.value)}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="J. Okafor">J. Okafor</option>
+                <option value="S. Patel">S. Patel</option>
+                <option value="A. Brennan">A. Brennan</option>
+                <option value="M. Chen">M. Chen</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-3 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">Cancel</button>
+          <button
+            disabled={isSubmitting || !client.trim() || !service.trim()}
+            onClick={handleSave}
+            className="px-5 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          >
+            {isSubmitting ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteEngagementModal({
+  eng,
+  onClose,
+  onDeleted,
+}: {
+  eng: EngagementRow;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await engagementsApi.delete(eng.id);
+      await activityApi.log({
+        time: "Just now",
+        actor: eng.adviser,
+        action: "Deleted engagement",
+        target: `${eng.id} · ${eng.client}`,
+        type: "reject",
+      });
+      onDeleted();
+      onClose();
+    } catch {
+      onDeleted();
+      onClose();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[440px] rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#FCE8EB] text-[#D0021B] flex items-center justify-center shrink-0">
+            <Trash2 size={20} />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-semibold text-foreground">Delete Engagement?</h3>
+            <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
+              Are you sure you want to delete engagement <span className="font-mono text-[11px] font-semibold text-foreground">{eng.id}</span> ({eng.service}) for <strong>{eng.client}</strong>? This contract will be removed.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <button onClick={onClose} disabled={isDeleting} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="px-5 py-2 bg-[#D0021B] text-white text-[13px] font-semibold rounded hover:bg-[#B00216] disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          >
+            {isDeleting ? "Deleting…" : "Delete Engagement"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EngagementsScreen({
   fullPageEngagement,
   onOpenFull,
@@ -4027,8 +6864,11 @@ function EngagementsScreen({
   const [showNewEngagement, setShowNewEngagement] = useState(false);
   const [statusFilter, setStatusFilter] = useState("All");
   const [selectedEngagement, setSelectedEngagement] = useState<EngagementRow | null>(null);
+  const [editingEngagement, setEditingEngagement] = useState<EngagementRow | null>(null);
+  const [deletingEngagement, setDeletingEngagement] = useState<EngagementRow | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
+  const pageSize = 8;
 
   const { data: page, loading, error, refetch } = useApiData(
     () => engagementsApi.list({ search: search || undefined }),
@@ -4072,6 +6912,20 @@ function EngagementsScreen({
           }}
         />
       )}
+      {editingEngagement && (
+        <EditEngagementModal
+          eng={editingEngagement}
+          onClose={() => setEditingEngagement(null)}
+          onSaved={() => { refetch(); }}
+        />
+      )}
+      {deletingEngagement && (
+        <DeleteEngagementModal
+          eng={deletingEngagement}
+          onClose={() => setDeletingEngagement(null)}
+          onDeleted={() => { refetch(); }}
+        />
+      )}
       {selectedEngagement && (
         <EngagementDetailDrawer
           eng={selectedEngagement}
@@ -4085,20 +6939,20 @@ function EngagementsScreen({
       subtitle="Signed letters of engagement and active service terms"
       breadcrumb={["EnTIQ", "Start", "Engagements"]}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {["All", "Active", "Renewal due", "Proposal issued", "Terminated"].map(v => (
             <button
               key={v}
               onClick={() => { setStatusFilter(v); setCurrentPage(1); }}
-              className={`px-3 py-1.5 text-[12px] font-medium rounded border transition-colors ${statusFilter === v ? "border-[#2855A6] bg-[#EEF2FA] text-[#2855A6]" : "border-border text-muted-foreground hover:text-foreground"}`}
+              className={`px-2.5 py-1 text-[11px] font-medium rounded border transition-colors ${statusFilter === v ? "border-[#2855A6] bg-[#EEF2FA] text-[#2855A6]" : "border-border text-muted-foreground hover:text-foreground"}`}
             >
               {v}
             </button>
           ))}
-          <div className="w-px h-5 bg-border mx-1" />
+          <div className="w-px h-4 bg-border mx-1" />
           <button
             onClick={() => setShowNewEngagement(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2855A6] text-white text-[12px] font-semibold rounded hover:bg-[#1F4491] transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#2855A6] text-white text-[11.5px] font-semibold rounded hover:bg-[#1F4491] transition-colors"
           >
             <Plus size={13} />
             New engagement
@@ -4107,91 +6961,141 @@ function EngagementsScreen({
       }
     >
       {/* Summary */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-4 gap-2">
         {[
           { label: "Active engagements", value: loading ? "—" : allEngagements.filter(e => e.status === "Active").length, color: "text-[#2EA843]" },
           { label: "Renewal due within 60d", value: allEngagements.filter(e => e.status === "Renewal due").length, color: "text-[#F5A623]" },
           { label: "Pending signature", value: allEngagements.filter(e => e.status === "Proposal issued").length, color: "text-[#2855A6]" },
           { label: "Annual fee (active)", value: "$26.1k", color: "text-foreground" },
         ].map(s => (
-          <div key={s.label} className="bg-card border border-border rounded-lg px-4 py-3">
-            <div className="text-[11px] text-muted-foreground mb-1">{s.label}</div>
-            <div className={`text-[22px] font-bold ${s.color}`}>{s.value}</div>
+          <div key={s.label} className="bg-card border border-border rounded-lg px-2.5 py-1.5">
+            <div className="text-[9.5px] text-muted-foreground mb-0.5">{s.label}</div>
+            <div className={`text-[15px] font-bold ${s.color}`}>{s.value}</div>
           </div>
         ))}
       </div>
 
       {/* Search */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <div className="relative">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             value={search}
             onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
             placeholder="Search client or engagement…"
-            className="pl-7 pr-3 py-1.5 text-[12px] bg-card border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] w-[240px] transition-all"
+            className="pl-7 pr-2.5 py-1 text-[11.5px] bg-card border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] w-[220px] transition-all"
           />
         </div>
         <div className="flex-1" />
         <button
           onClick={handleExport}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] text-muted-foreground border border-border rounded hover:bg-muted transition-colors"
+          className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-muted-foreground border border-border rounded hover:bg-muted transition-colors"
         >
-          <Download size={12} />Export
+          <Download size={11} />Export
         </button>
       </div>
 
       {error && <ApiErrorBanner message={error} onRetry={refetch} />}
       {loading ? <TableSkeleton rows={7} cols={9} /> : (
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <table className="w-full text-[12px]">
+      <div className="bg-card border border-border rounded-lg overflow-x-auto">
+        <table className="w-full text-[11px] min-w-[900px]">
           <thead>
             <tr className="border-b border-border bg-[#FAFAFA]">
-              {["Engagement ID", "Client", "Service", "Annual fee", "Signed", "Renewal due", "Status", "Adviser", ""].map(h => (
-                <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
+              {["Engagement ID", "Client", "Service", "Annual fee", "Signed", "Renewal due", "Status", "Adviser", "Actions"].map((h, idx) => (
+                <th key={h} className={`${idx === 8 ? "text-right pr-3" : "text-left"} px-2.5 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap`}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {displayedEngagements.map((e, i) => (
               <tr key={e.id} onClick={() => setSelectedEngagement(e)} className={`border-b border-border last:border-0 hover:bg-[#F8FAFF] cursor-pointer transition-colors ${i % 2 !== 0 ? "bg-[#FAFAFA]/50" : ""}`}>
-                <td className="px-4 py-3"><span className="font-mono text-[11px] text-[#2855A6]">{e.id}</span></td>
-                <td className="px-4 py-3 font-medium text-foreground max-w-[160px] truncate">{e.client}</td>
-                <td className="px-4 py-3 text-muted-foreground max-w-[160px] truncate">{e.service}</td>
-                <td className="px-4 py-3 font-semibold text-foreground">{e.fee}</td>
-                <td className="px-4 py-3 text-muted-foreground">{e.signed || "—"}</td>
-                <td className="px-4 py-3 text-muted-foreground">{e.renewalDue || "—"}</td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${engStatusColor(e.status)}`}>{e.status}</span>
+                <td className="px-2.5 py-1.5 whitespace-nowrap"><span className="font-mono text-[10.5px] text-[#2855A6] font-semibold">{e.id}</span></td>
+                <td className="px-2.5 py-1.5 font-medium text-foreground max-w-[140px] truncate text-[11px]">{e.client}</td>
+                <td className="px-2.5 py-1.5 text-muted-foreground max-w-[140px] truncate text-[10.5px]">{e.service}</td>
+                <td className="px-2.5 py-1.5 font-semibold text-foreground text-[10.5px]">{e.fee}</td>
+                <td className="px-2.5 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{e.signed || "—"}</td>
+                <td className="px-2.5 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{e.renewalDue || "—"}</td>
+                <td className="px-2.5 py-1.5 whitespace-nowrap">
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${engStatusColor(e.status)}`}>{e.status}</span>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{e.adviser}</td>
-                <td className="px-4 py-3"><button onClick={ev => { ev.stopPropagation(); setSelectedEngagement(e); }} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><MoreHorizontal size={14} /></button></td>
+                <td className="px-2.5 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{e.adviser}</td>
+                <td className="px-2.5 py-1.5 text-right relative pr-3" onClick={ev => ev.stopPropagation()}>
+                  <button
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      setOpenMenuId(openMenuId === e.id ? null : e.id);
+                    }}
+                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center justify-center"
+                    title="Actions"
+                  >
+                    <MoreHorizontal size={13} />
+                  </button>
+
+                  {openMenuId === e.id && (
+                    <div
+                      onClick={ev => ev.stopPropagation()}
+                      className="absolute right-3 top-7 w-36 bg-card border border-border rounded-lg shadow-xl py-1 z-30 animate-in fade-in zoom-in-95 text-left"
+                    >
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null);
+                          setSelectedEngagement(e);
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-foreground hover:bg-[#EEF2FA] hover:text-[#2855A6] transition-colors"
+                      >
+                        <Eye size={12} className="text-[#2855A6]" />
+                        <span>View</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null);
+                          setEditingEngagement(e);
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-foreground hover:bg-[#FEF6E9] hover:text-[#B87A1A] transition-colors"
+                      >
+                        <Pencil size={12} className="text-[#F5A623]" />
+                        <span>Edit</span>
+                      </button>
+                      <div className="my-0.5 border-t border-border" />
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null);
+                          setDeletingEngagement(e);
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[11px] text-[#D0021B] hover:bg-[#FCE8EB] transition-colors"
+                      >
+                        <Trash2 size={12} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
 
         {filtered.length === 0 && (
-          <div className="py-12 text-center text-[13px] text-muted-foreground">
+          <div className="py-8 text-center text-[12px] text-muted-foreground">
             No engagements match your criteria.
           </div>
         )}
 
-        <div className="px-4 py-2.5 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
+        <div className="px-3 py-1.5 border-t border-border flex items-center justify-between text-[10px] text-muted-foreground">
           <span>{filtered.length} engagement{filtered.length !== 1 ? "s" : ""} shown</span>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <button
               disabled={currentPage === 1}
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              className="hover:text-foreground disabled:opacity-40"
+              className="hover:text-foreground disabled:opacity-40 font-medium"
             >
               Previous
             </button>
-            <span className="px-2 py-0.5 bg-[#EEF2FA] text-[#2855A6] rounded font-semibold">{currentPage} / {totalPages}</span>
+            <span className="px-1.5 py-0.5 bg-[#EEF2FA] text-[#2855A6] rounded font-semibold">{currentPage} / {totalPages}</span>
             <button
               disabled={currentPage === totalPages}
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              className="hover:text-foreground disabled:opacity-40"
+              className="hover:text-foreground disabled:opacity-40 font-medium"
             >
               Next
             </button>
@@ -4238,6 +7142,40 @@ function activityDot(type: string) {
   return colors[type] ?? "bg-[#D1D1D1]";
 }
 
+function formatRelativeTime(createdAt?: string, fallbackTime?: string): string {
+  if (!createdAt) return fallbackTime || "Just now";
+  const date = new Date(createdAt);
+  if (isNaN(date.getTime())) return fallbackTime || "Just now";
+
+  const now = new Date();
+  const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffSec < 120) return "Just now";
+  if (diffSec < 3600) return `${Math.max(1, Math.floor(diffSec / 60))}m ago`;
+
+  const timeStr = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true }).toLowerCase();
+
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  if (isToday) return `Today, ${timeStr}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    date.getFullYear() === yesterday.getFullYear() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getDate() === yesterday.getDate();
+  if (isYesterday) return `Yesterday, ${timeStr}`;
+
+  const dayStr = date.toLocaleDateString([], { day: "numeric", month: "short" });
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${dayStr}, ${timeStr}`;
+  }
+  return `${dayStr} ${date.getFullYear()}, ${timeStr}`;
+}
+
 function ActivityScreen() {
   const [filter, setFilter] = useState("All");
   const [quickFilter, setQuickFilter] = useState<string | null>(null);
@@ -4248,6 +7186,24 @@ function ActivityScreen() {
     [filter]
   );
   const rawEvents = page?.items ?? ACTIVITY_EVENTS;
+
+  const todayEvents = rawEvents.filter(ev => {
+    if (ev.createdAt) {
+      const d = new Date(ev.createdAt);
+      const now = new Date();
+      return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+      );
+    }
+    return typeof ev.time === "string" && (
+      ev.time.startsWith("Today") ||
+      ev.time === "Just now" ||
+      ev.time.endsWith("m ago") ||
+      ev.time.endsWith("s ago")
+    );
+  });
 
   const events = rawEvents.filter(ev => {
     if (quickFilter === "Accepted this week") return ev.type === "accept";
@@ -4274,16 +7230,16 @@ function ActivityScreen() {
       subtitle="Real-time event log across all cases and clients"
       breadcrumb={["EnTIQ", "Start", "Activity"]}
     >
-      <div className="flex gap-4 items-start">
+      <div className="flex gap-3 items-start">
         {/* Main feed */}
-        <div className="flex-1 space-y-4">
+        <div className="flex-1 space-y-2.5">
           {/* Filter bar */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {filters.map(f => (
               <button
                 key={f}
                 onClick={() => { setFilter(f); setQuickFilter(null); }}
-                className={`px-3 py-1.5 text-[12px] font-medium rounded border transition-colors ${filter === f && !quickFilter ? "border-[#2855A6] bg-[#EEF2FA] text-[#2855A6]" : "border-border text-muted-foreground hover:text-foreground"}`}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded border transition-colors ${filter === f && !quickFilter ? "border-[#2855A6] bg-[#EEF2FA] text-[#2855A6]" : "border-border text-muted-foreground hover:text-foreground"}`}
               >
                 {f}
               </button>
@@ -4291,9 +7247,9 @@ function ActivityScreen() {
             <div className="flex-1" />
             <button
               onClick={handleExport}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] text-muted-foreground border border-border rounded hover:bg-muted transition-colors"
+              className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-muted-foreground border border-border rounded hover:bg-muted transition-colors"
             >
-              <Download size={12} />Export audit log
+              <Download size={11} />Export audit log
             </button>
           </div>
 
@@ -4303,24 +7259,24 @@ function ActivityScreen() {
           {loading ? <TableSkeleton rows={8} cols={3} /> : (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
             {events.map((ev, i) => (
-              <div key={ev.id} className={`flex gap-4 px-5 py-4 ${i < events.length - 1 ? "border-b border-border" : ""} hover:bg-[#F8FAFF] transition-colors`}>
-                <div className="flex flex-col items-center gap-1 pt-1">
-                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${activityDot(ev.type)}`} />
-                  {i < events.length - 1 && <div className="w-px flex-1 bg-border min-h-[20px]" />}
+              <div key={ev.id} className={`flex gap-2.5 px-3 py-2 ${i < events.length - 1 ? "border-b border-border" : ""} hover:bg-[#F8FAFF] transition-colors`}>
+                <div className="flex flex-col items-center gap-0.5 pt-1">
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${activityDot(ev.type)}`} />
+                  {i < events.length - 1 && <div className="w-px flex-1 bg-border min-h-[14px]" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-2 mb-0.5">
-                    <span className="text-[13px] font-semibold text-foreground">{ev.action}</span>
-                    <span className="text-[11px] text-muted-foreground">by {ev.actor}</span>
+                  <div className="flex items-baseline gap-1.5 mb-0.5">
+                    <span className="text-[11.5px] font-semibold text-foreground">{ev.action}</span>
+                    <span className="text-[10px] text-muted-foreground">by {ev.actor}</span>
                   </div>
-                  <p className="text-[12px] text-muted-foreground leading-snug">{ev.target}</p>
+                  <p className="text-[10.5px] text-muted-foreground leading-tight">{ev.target}</p>
                 </div>
-                <div className="text-[11px] text-muted-foreground whitespace-nowrap pt-0.5">{ev.time}</div>
+                <div className="text-[10px] text-muted-foreground whitespace-nowrap pt-0.5">{formatRelativeTime(ev.createdAt, ev.time)}</div>
               </div>
             ))}
 
             {events.length === 0 && (
-              <div className="py-12 text-center text-[13px] text-muted-foreground">
+              <div className="py-8 text-center text-[12px] text-muted-foreground">
                 No activity logs match your filter criteria.
               </div>
             )}
@@ -4329,31 +7285,32 @@ function ActivityScreen() {
         </div>
 
         {/* Right summary */}
-        <div className="w-[240px] space-y-4">
-          <div className="bg-card border border-border rounded-lg p-4">
-            <h3 className="text-[13px] font-semibold text-foreground mb-3">Today at a glance</h3>
-            <div className="space-y-2">
+        <div className="w-[210px] space-y-2 shrink-0">
+          <div className="bg-card border border-border rounded-lg p-2.5">
+            <h3 className="text-[11px] font-semibold text-foreground mb-1.5">Today at a glance</h3>
+            <div className="space-y-1">
               {[
-                { label: "Events recorded", value: rawEvents.length },
-                { label: "Cases updated", value: rawEvents.filter(e => e.type === "accept" || e.type === "submit").length },
-                { label: "Documents received", value: rawEvents.filter(e => e.type === "upload").length },
-                { label: "Exceptions raised", value: rawEvents.filter(e => e.type === "exception").length },
+                { label: "Events recorded today", value: todayEvents.length },
+                { label: "Cases updated today", value: todayEvents.filter(e => e.type === "accept" || e.type === "submit").length },
+                { label: "Documents received today", value: todayEvents.filter(e => e.type === "upload").length },
+                { label: "Exceptions raised today", value: todayEvents.filter(e => e.type === "exception").length },
+                { label: "Total audit events", value: rawEvents.length },
               ].map(s => (
                 <div key={s.label} className="flex items-center justify-between">
-                  <span className="text-[12px] text-muted-foreground">{s.label}</span>
-                  <span className="text-[13px] font-semibold text-foreground">{s.value}</span>
+                  <span className="text-[10px] text-muted-foreground">{s.label}</span>
+                  <span className="text-[10.5px] font-semibold text-foreground">{s.value}</span>
                 </div>
               ))}
             </div>
           </div>
-          <div className="bg-card border border-border rounded-lg p-4">
-            <h3 className="text-[13px] font-semibold text-foreground mb-3">Quick filters</h3>
-            <div className="space-y-1.5">
+          <div className="bg-card border border-border rounded-lg p-2.5">
+            <h3 className="text-[11px] font-semibold text-foreground mb-1.5">Quick filters</h3>
+            <div className="space-y-0.5">
               {["Accepted this week", "Exceptions unresolved", "Proposals overdue", "Identity failures"].map(f => (
                 <button
                   key={f}
                   onClick={() => setQuickFilter(f)}
-                  className={`w-full text-left px-3 py-1.5 text-[12px] rounded transition-colors ${quickFilter === f ? "bg-[#EEF2FA] text-[#2855A6] font-semibold" : "text-[#2855A6] hover:bg-[#EEF2FA]"}`}
+                  className={`w-full text-left px-2 py-0.5 text-[10.5px] rounded transition-colors ${quickFilter === f ? "bg-[#EEF2FA] text-[#2855A6] font-semibold" : "text-[#2855A6] hover:bg-[#EEF2FA]"}`}
                 >
                   {f}
                 </button>
@@ -4582,15 +7539,15 @@ function TemplatesScreen() {
   const [localNew, setLocalNew] = useState<typeof TEMPLATE_ROWS>([]);
   const [builderTemplate, setBuilderTemplate] = useState<{ name: string; type: string } | null>(null);
 
-  if (builderTemplate) {
-    return <DocumentBuilderScreen templateName={builderTemplate.name} templateType={builderTemplate.type} onBack={() => setBuilderTemplate(null)} />;
-  }
-
   const { data: page, loading, error, refetch } = useApiData(
     () => templatesApi.list({ search: search || undefined, type: typeFilter || undefined }),
     [search, typeFilter]
   );
   const allTemplates = [...(page?.items ?? TEMPLATE_ROWS), ...localNew];
+
+  if (builderTemplate) {
+    return <DocumentBuilderScreen templateName={builderTemplate.name} templateType={builderTemplate.type} onBack={() => setBuilderTemplate(null)} />;
+  }
 
   const filtered = allTemplates.filter(t => {
     const ms = !search || t.name.toLowerCase().includes(search.toLowerCase());
@@ -4620,42 +7577,42 @@ function TemplatesScreen() {
         </button>
       }
     >
-      <div className="flex gap-5">
+      <div className="flex gap-3">
         {/* Left: type nav */}
-        <div className="w-[200px] shrink-0">
+        <div className="w-[170px] shrink-0">
           <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-border">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Template type</span>
+            <div className="px-3 py-1.5 border-b border-border">
+              <span className="text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider">Template type</span>
             </div>
             {["All templates", "Engagement", "Questionnaire", "Consent notice", "Service catalogue"].map(t => (
               <button
                 key={t}
                 onClick={() => setTypeFilter(t === "All templates" ? "" : t)}
-                className={`w-full text-left px-4 py-2.5 text-[13px] border-b border-border last:border-0 transition-colors ${(t === "All templates" && !typeFilter) || typeFilter === t ? "bg-[#EEF2FA] text-[#2855A6] font-semibold" : "text-muted-foreground hover:bg-[#F5F5F5]"}`}
+                className={`w-full text-left px-3 py-1.5 text-[11.5px] border-b border-border last:border-0 transition-colors ${(t === "All templates" && !typeFilter) || typeFilter === t ? "bg-[#EEF2FA] text-[#2855A6] font-semibold" : "text-muted-foreground hover:bg-[#F5F5F5]"}`}
               >{t}</button>
             ))}
           </div>
         </div>
 
         {/* Right: template list */}
-        <div className="flex-1 space-y-3">
-          <div className="flex items-center gap-3">
+        <div className="flex-1 space-y-2.5">
+          <div className="flex items-center gap-2">
             <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search templates…" className="pl-7 pr-3 py-1.5 text-[12px] bg-card border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] w-[220px] transition-all" />
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search templates…" className="pl-7 pr-2.5 py-1 text-[11.5px] bg-card border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] w-[200px] transition-all" />
             </div>
             <div className="flex-1" />
-            <span className="text-[12px] text-muted-foreground">{loading ? "Loading…" : `${filtered.length} templates`}</span>
+            <span className="text-[11px] text-muted-foreground">{loading ? "Loading…" : `${filtered.length} templates`}</span>
           </div>
 
           {error && <ApiErrorBanner message={error} onRetry={refetch} />}
           {loading ? <TableSkeleton rows={10} cols={9} /> : (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-[11px]">
               <thead>
                 <tr className="border-b border-border bg-[#FAFAFA]">
                   {["ID", "Name", "Type", "Service", "Version", "Status", "Last updated", "Author", ""].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
+                    <th key={h} className="text-left px-2.5 py-1.5 text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -4666,20 +7623,20 @@ function TemplatesScreen() {
                     onClick={() => setBuilderTemplate({ name: t.name, type: t.type })}
                     className={`border-b border-border last:border-0 hover:bg-[#F0F5FF] cursor-pointer transition-colors ${i % 2 !== 0 ? "bg-[#FAFAFA]/50" : ""}`}
                   >
-                    <td className="px-4 py-3"><span className="font-mono text-[11px] text-[#2855A6]">{t.id}</span></td>
-                    <td className="px-4 py-3 font-medium text-foreground max-w-[200px] truncate">{t.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{t.type}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{t.service}</td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{t.version}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${tplStatusColor(t.status)}`}>{t.status}</span>
+                    <td className="px-2.5 py-1.5 whitespace-nowrap"><span className="font-mono text-[10.5px] text-[#2855A6] font-semibold">{t.id}</span></td>
+                    <td className="px-2.5 py-1.5 font-medium text-foreground max-w-[180px] truncate text-[11px]">{t.name}</td>
+                    <td className="px-2.5 py-1.5 text-muted-foreground text-[10.5px]">{t.type}</td>
+                    <td className="px-2.5 py-1.5 text-muted-foreground text-[10.5px]">{t.service}</td>
+                    <td className="px-2.5 py-1.5 font-mono text-[10.5px] text-muted-foreground whitespace-nowrap">{t.version}</td>
+                    <td className="px-2.5 py-1.5 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${tplStatusColor(t.status)}`}>{t.status}</span>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{t.updated}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{t.author}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setBuilderTemplate({ name: t.name, type: t.type })} className="p-1 rounded text-muted-foreground hover:text-[#2855A6] hover:bg-[#EEF2FA] transition-colors text-[11px] font-semibold px-2">Open</button>
-                        <button className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><MoreHorizontal size={14} /></button>
+                    <td className="px-2.5 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{t.updated}</td>
+                    <td className="px-2.5 py-1.5 text-muted-foreground whitespace-nowrap text-[10.5px]">{t.author}</td>
+                    <td className="px-2.5 py-1.5 text-right pr-2">
+                      <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setBuilderTemplate({ name: t.name, type: t.type })} className="px-1.5 py-0.5 rounded text-muted-foreground hover:text-[#2855A6] hover:bg-[#EEF2FA] transition-colors text-[10px] font-semibold">Open</button>
+                        <button className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><MoreHorizontal size={13} /></button>
                       </div>
                     </td>
                   </tr>
@@ -4699,10 +7656,23 @@ function TemplatesScreen() {
 function AuthenticatedApp() {
   const [activeNav, setActiveNav] = useState("dashboard");
   const [showModal, setShowModal] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [fullEngagement, setFullEngagement] = useState<EngagementRow | null>(null);
+  const [selectedGlobalCase, setSelectedGlobalCase] = useState<OnboardingCase | null>(null);
+
+  const navContextValue: NavigationContextType = {
+    activeNav,
+    setActiveNav: (id) => {
+      setActiveNav(id);
+      if (id !== "engagements") setFullEngagement(null);
+    },
+    openNewInvitation: () => setShowModal(true),
+    openApiKeyModal: () => setShowApiKeyModal(true),
+    openCaseDetail: (caseItem) => setSelectedGlobalCase(caseItem),
+  };
 
   const screenMap: Record<string, React.ReactNode> = {
-    dashboard: <Dashboard />,
+    dashboard: <Dashboard onOpenApiKeyModal={() => setShowApiKeyModal(true)} />,
     cases: <CasesScreen />,
     invitations: <InvitationsScreen />,
     clients: <ClientsScreen />,
@@ -4716,13 +7686,26 @@ function AuthenticatedApp() {
   };
 
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden" style={{ fontFamily: "'Inter', sans-serif" }}>
-      {showModal && <NewInvitationModal onClose={() => setShowModal(false)} />}
-      <Sidebar active={activeNav} setActive={(id) => { setActiveNav(id); if (id !== "engagements") setFullEngagement(null); }} />
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {screenMap[activeNav]}
+    <NavigationContext.Provider value={navContextValue}>
+      <div className="flex h-screen w-full bg-background overflow-hidden" style={{ fontFamily: "'Inter', sans-serif" }}>
+        {showModal && <NewInvitationModal onClose={() => setShowModal(false)} />}
+        {showApiKeyModal && <ApiKeyModal isOpen={showApiKeyModal} onClose={() => setShowApiKeyModal(false)} />}
+        {selectedGlobalCase && (
+          <CaseDetailDrawer
+            c={selectedGlobalCase}
+            onClose={() => setSelectedGlobalCase(null)}
+          />
+        )}
+        <Sidebar
+          active={activeNav}
+          setActive={(id) => { setActiveNav(id); if (id !== "engagements") setFullEngagement(null); }}
+          onOpenApiKeyModal={() => setShowApiKeyModal(true)}
+        />
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {screenMap[activeNav]}
+        </div>
       </div>
-    </div>
+    </NavigationContext.Provider>
   );
 }
 
@@ -4730,6 +7713,18 @@ function AuthenticatedApp() {
 
 function AppShell() {
   const { isAuthenticated, isLoading } = useAuth();
+
+  // Check if current URL is for public client onboarding
+  const searchParams = new URLSearchParams(window.location.search);
+  const isClientPortal =
+    window.location.pathname.startsWith("/onboard") ||
+    searchParams.has("id") ||
+    searchParams.has("onboarding");
+
+  if (isClientPortal) {
+    const invId = searchParams.get("id") || searchParams.get("onboarding") || undefined;
+    return <ClientOnboardingPortal invitationId={invId} />;
+  }
 
   if (isLoading) {
     return (

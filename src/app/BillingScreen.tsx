@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus, Search, Download, CheckCircle, Clock, AlertTriangle, XCircle,
   RefreshCw, ExternalLink, CreditCard, FileText, DollarSign, ChevronDown,
   MoreHorizontal, X, ChevronRight, Calendar, Repeat, Briefcase, Flag,
-  Hash, Zap, Building2, Check,
+  Hash, Zap, Building2, Check, Copy, Eye, Pencil, Trash2,
 } from "lucide-react";
 import { PageShell } from "./shared";
 import { INITIAL_FEES, INITIAL_STAFF } from "./ServicesScreen";
-import { exportToCsv } from "../lib/api";
+import { exportToCsv, billing } from "../lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -167,62 +167,62 @@ function ConnectionBanner({
   onConnectXero: () => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-2 gap-3">
       {/* Square card */}
-      <div className={`flex items-start gap-4 p-4 rounded-xl border ${squareConn === "connected" ? "border-[#3E4348]/20 bg-[#3E4348]/5" : "border-border bg-card"}`}>
-        <div className="w-10 h-10 rounded-lg bg-black flex items-center justify-center shrink-0">
-          <span className="text-white font-bold text-[13px]">SQ</span>
+      <div className={`flex items-start gap-3 p-3 rounded-lg border ${squareConn === "connected" ? "border-[#3E4348]/20 bg-[#3E4348]/5" : "border-border bg-card"}`}>
+        <div className="w-8 h-8 rounded-md bg-black flex items-center justify-center shrink-0">
+          <span className="text-white font-bold text-[11px]">SQ</span>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-[14px] font-semibold text-foreground">Square</span>
+            <span className="text-[13px] font-semibold text-foreground">Square</span>
             {squareConn === "connected"
               ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#E8F7EB] text-[#1E7A31]">Connected</span>
               : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#F0F0F0] text-[#6F6F6F]">Not connected</span>}
           </div>
-          <p className="text-[11px] text-muted-foreground mb-2.5">
+          <p className="text-[11px] text-muted-foreground mb-2 leading-tight">
             {squareConn === "connected"
               ? "Payments are processed and subscriptions managed via Square. Card-on-file, bank transfer and payment links supported."
               : "Connect Square to take card payments, set up recurring billing, and automatically reconcile with Xero."}
           </p>
           {squareConn === "connected" ? (
-            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1"><CheckCircle size={11} className="text-[#2EA843]" />Grow Advisory Group · SQ sandbox</span>
-              <button className="text-[#2855A6] font-semibold hover:underline flex items-center gap-0.5">Configure <ExternalLink size={10} /></button>
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-1"><CheckCircle size={10} className="text-[#2EA843]" />Grow Advisory Group · SQ sandbox</span>
+              <button className="text-[#2855A6] font-semibold hover:underline flex items-center gap-0.5">Configure <ExternalLink size={9} /></button>
             </div>
           ) : (
-            <button onClick={onConnectSquare} className="flex items-center gap-1.5 px-3 py-1.5 bg-black text-white text-[12px] font-semibold rounded hover:bg-[#222] transition-colors">
-              <CreditCard size={12} />Connect Square
+            <button onClick={onConnectSquare} className="flex items-center gap-1.5 px-2.5 py-1 bg-black text-white text-[11px] font-semibold rounded hover:bg-[#222] transition-colors">
+              <CreditCard size={11} />Connect Square
             </button>
           )}
         </div>
       </div>
 
       {/* Xero card */}
-      <div className={`flex items-start gap-4 p-4 rounded-xl border ${xeroConn === "connected" ? "border-[#13B5EA]/20 bg-[#13B5EA]/5" : "border-border bg-card"}`}>
-        <div className="w-10 h-10 rounded-lg bg-[#13B5EA] flex items-center justify-center shrink-0">
-          <span className="text-white font-bold text-[12px]">XA</span>
+      <div className={`flex items-start gap-3 p-3 rounded-lg border ${xeroConn === "connected" ? "border-[#13B5EA]/20 bg-[#13B5EA]/5" : "border-border bg-card"}`}>
+        <div className="w-8 h-8 rounded-md bg-[#13B5EA] flex items-center justify-center shrink-0">
+          <span className="text-white font-bold text-[11px]">XA</span>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-[14px] font-semibold text-foreground">Xero Accounting</span>
+            <span className="text-[13px] font-semibold text-foreground">Xero Accounting</span>
             {xeroConn === "connected"
               ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#E8F7EB] text-[#1E7A31]">Connected</span>
               : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#F0F0F0] text-[#6F6F6F]">Not connected</span>}
           </div>
-          <p className="text-[11px] text-muted-foreground mb-2.5">
+          <p className="text-[11px] text-muted-foreground mb-2 leading-tight">
             {xeroConn === "connected"
               ? "Invoices raised here are automatically created in Xero. Square payments post receipts back for one-click reconciliation."
               : "Connect Xero to automatically raise invoices, sync payment status, and reconcile Square receipts in one click."}
           </p>
           {xeroConn === "connected" ? (
-            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1"><CheckCircle size={11} className="text-[#2EA843]" />Grow Advisory Group · Synced 2 min ago</span>
-              <button className="text-[#2855A6] font-semibold hover:underline flex items-center gap-0.5">Open Xero <ExternalLink size={10} /></button>
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-1"><CheckCircle size={10} className="text-[#2EA843]" />Grow Advisory Group · Synced 2 min ago</span>
+              <button className="text-[#2855A6] font-semibold hover:underline flex items-center gap-0.5">Open Xero <ExternalLink size={9} /></button>
             </div>
           ) : (
-            <button onClick={onConnectXero} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#13B5EA] text-white text-[12px] font-semibold rounded hover:bg-[#0FA3D4] transition-colors">
-              <Building2 size={12} />Connect Xero
+            <button onClick={onConnectXero} className="flex items-center gap-1.5 px-2.5 py-1 bg-[#13B5EA] text-white text-[11px] font-semibold rounded hover:bg-[#0FA3D4] transition-colors">
+              <Building2 size={11} />Connect Xero
             </button>
           )}
         </div>
@@ -549,17 +549,24 @@ function NewScheduleModal({ onClose, onCreated, squareConn, xeroConn }: {
 
 // ─── Raise Invoice Modal ──────────────────────────────────────────────────────
 
-function RaiseInvoiceModal({ invoice, xeroConn, squareConn, onClose }: {
+function RaiseInvoiceModal({ invoice, xeroConn, squareConn, onClose, onRaised }: {
   invoice: Invoice;
   xeroConn: XeroConnection;
   squareConn: SquareConnection;
   onClose: () => void;
+  onRaised?: (inv: Invoice) => void;
 }) {
   const [done, setDone] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
   function handleRaise() {
     setSyncing(true);
+    billing.updateInvoiceStatus(invoice.id, "Sent").then(updated => {
+      if (onRaised) onRaised(updated);
+    }).catch(err => {
+      console.error("Failed to update invoice status in DB", err);
+      if (onRaised) onRaised({ ...invoice, status: "Sent" });
+    });
     setTimeout(() => { setSyncing(false); setDone(true); }, 1400);
   }
 
@@ -1026,6 +1033,783 @@ function ScheduleDrawer({
   );
 }
 
+function PaymentDetailModal({
+  payment,
+  onClose,
+}: {
+  payment: Payment;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (payment.squareTxId) {
+      navigator.clipboard.writeText(payment.squareTxId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[1px]">
+      <div className="bg-card w-[480px] rounded-xl shadow-2xl overflow-hidden border border-border flex flex-col">
+        <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-[#2855A6] flex items-center justify-center text-white text-[10px] font-bold">
+              PAY
+            </div>
+            <div>
+              <h3 className="text-[13px] font-semibold text-foreground leading-tight">Payment Details</h3>
+              <p className="font-mono text-[10px] text-muted-foreground">{payment.id}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground transition-colors">
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-3.5 text-[12px]">
+          {/* Amount and Status banner */}
+          <div className="p-3 rounded-lg bg-muted/40 border border-border flex items-center justify-between">
+            <div>
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Amount Paid</span>
+              <div className="text-[18px] font-bold text-foreground">{AUD(payment.amount)}</div>
+            </div>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${paymentStatusColor(payment.status)}`}>
+              {payment.status}
+            </span>
+          </div>
+
+          {/* Key metadata grid */}
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="p-2.5 rounded-lg border border-border bg-card">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Client</span>
+              <div className="font-medium text-foreground mt-0.5 truncate">{payment.client}</div>
+            </div>
+            <div className="p-2.5 rounded-lg border border-border bg-card">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Invoice ID</span>
+              <div className="font-mono text-[11px] text-[#2855A6] mt-0.5">{payment.invoiceId}</div>
+            </div>
+            <div className="p-2.5 rounded-lg border border-border bg-card">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Method</span>
+              <div className="font-medium text-foreground mt-0.5">{payment.method}</div>
+            </div>
+            <div className="p-2.5 rounded-lg border border-border bg-card">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Payment Date</span>
+              <div className="font-medium text-foreground mt-0.5">{payment.date}</div>
+            </div>
+          </div>
+
+          {/* Square Gateway Transaction Card */}
+          <div className="p-3 rounded-lg border border-border bg-card space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="w-4 h-4 rounded bg-black flex items-center justify-center text-white text-[8px] font-bold">SQ</span>
+                <span className="text-[11px] font-semibold text-foreground">Square Transaction Details</span>
+              </div>
+              {payment.squareTxId ? (
+                <span className="text-[10px] font-semibold text-[#2EA843] bg-[#E8F7EB] px-1.5 py-0.5 rounded">Recorded</span>
+              ) : (
+                <span className="text-[10px] text-muted-foreground">Not applicable</span>
+              )}
+            </div>
+
+            {payment.squareTxId ? (
+              <div className="flex items-center justify-between p-2 rounded bg-muted/60 border border-border">
+                <div className="font-mono text-[11px] text-foreground select-all truncate pr-2">
+                  {payment.squareTxId}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded bg-card border border-border text-foreground hover:bg-muted transition-colors shrink-0"
+                >
+                  {copied ? <Check size={11} className="text-[#2EA843]" /> : <Copy size={11} />}
+                  <span>{copied ? "Copied!" : "Copy"}</span>
+                </button>
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">This payment was settled offline without a Square transaction reference.</p>
+            )}
+          </div>
+
+          {/* Xero Reconciliation card */}
+          <div className="p-2.5 rounded-lg border border-border bg-card flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-4 h-4 rounded bg-[#13B5EA] flex items-center justify-center text-white text-[8px] font-bold">XA</span>
+              <div>
+                <div className="text-[11px] font-semibold text-foreground">Xero Ledger Status</div>
+                <div className="text-[10px] text-muted-foreground">{payment.xeroReconciled ? "Reconciled with bank feed" : "Awaiting reconciliation"}</div>
+              </div>
+            </div>
+            {payment.xeroReconciled ? (
+              <span className="flex items-center gap-1 text-[#2EA843] text-[11px] font-semibold">
+                <CheckCircle size={12} /> Reconciled
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[#F5A623] text-[11px] font-semibold">
+                <Clock size={12} /> Pending
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="px-5 py-2.5 border-t border-border bg-muted/20 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3.5 py-1.5 text-[12px] font-medium rounded border border-border text-foreground hover:bg-muted transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal components for Schedules, Invoices, Payments ──────────────────────
+
+function EditScheduleModal({
+  schedule,
+  onClose,
+  onSaved,
+}: {
+  schedule: BillingSchedule;
+  onClose: () => void;
+  onSaved: (updated: BillingSchedule) => void;
+}) {
+  const [service, setService] = useState(schedule.service);
+  const [type, setType] = useState<ScheduleType>(schedule.type);
+  const [amount, setAmount] = useState(schedule.amount);
+  const [nextDue, setNextDue] = useState(schedule.nextDue);
+  const [status, setStatus] = useState(schedule.status);
+  const [adviser, setAdviser] = useState(schedule.adviser);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!service.trim()) {
+      setError("Service description is required");
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const updated = await billing.updateSchedule(schedule.id, {
+        service: service.trim(),
+        type,
+        amount: Number(amount),
+        nextDue: nextDue.trim(),
+        status,
+        adviser,
+      });
+      onSaved(updated);
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || "Failed to update schedule");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[520px] max-h-[90vh] overflow-y-auto rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-[16px] font-semibold text-foreground">Edit Billing Schedule</h3>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Modify schedule for <span className="font-mono text-[#2855A6] font-semibold">{schedule.id}</span> ({schedule.client})</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><XCircle size={18} /></button>
+        </div>
+
+        {error && (
+          <div className="p-2.5 bg-[#FCE8EB] border border-[#D0021B]/30 rounded text-[12px] text-[#D0021B]">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-3 text-[13px]">
+          <div>
+            <label className="block font-medium text-foreground mb-1">Service *</label>
+            <input
+              value={service}
+              onChange={e => setService(e.target.value)}
+              className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-foreground mb-1">Billing Frequency</label>
+              <select
+                value={type}
+                onChange={e => setType(e.target.value as ScheduleType)}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="Monthly">Monthly</option>
+                <option value="Quarterly">Quarterly</option>
+                <option value="Annual">Annual</option>
+                <option value="Job-based">Job-based</option>
+                <option value="On completion">On completion</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-medium text-foreground mb-1">Amount (excl. GST) *</label>
+              <input
+                type="number"
+                step="0.01"
+                value={amount}
+                onChange={e => setAmount(Number(e.target.value))}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-foreground mb-1">Next Due Date</label>
+              <input
+                value={nextDue}
+                onChange={e => setNextDue(e.target.value)}
+                placeholder="e.g. 1 Oct 2026"
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              />
+            </div>
+            <div>
+              <label className="block font-medium text-foreground mb-1">Status</label>
+              <select
+                value={status}
+                onChange={e => setStatus(e.target.value as any)}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="Active">Active</option>
+                <option value="Paused">Paused</option>
+                <option value="Completed">Completed</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-medium text-foreground mb-1">Adviser</label>
+            <select
+              value={adviser}
+              onChange={e => setAdviser(e.target.value)}
+              className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+            >
+              <option value="J. Okafor">J. Okafor</option>
+              <option value="S. Patel">S. Patel</option>
+              <option value="A. Brennan">A. Brennan</option>
+              <option value="M. Chen">M. Chen</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-3 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">Cancel</button>
+          <button
+            disabled={isSubmitting || !service.trim() || !amount}
+            onClick={handleSave}
+            className="px-5 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          >
+            {isSubmitting ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteScheduleModal({
+  schedule,
+  onClose,
+  onDeleted,
+}: {
+  schedule: BillingSchedule;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await billing.deleteSchedule(schedule.id);
+      onDeleted();
+      onClose();
+    } catch {
+      onDeleted();
+      onClose();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[440px] rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#FCE8EB] text-[#D0021B] flex items-center justify-center shrink-0">
+            <Trash2 size={20} />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-semibold text-foreground">Delete Billing Schedule?</h3>
+            <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
+              Are you sure you want to delete schedule <span className="font-mono text-[11px] font-semibold text-foreground">{schedule.id}</span> ({schedule.service}) for <strong>{schedule.client}</strong>? Recurring billings under this contract will cease.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <button onClick={onClose} disabled={isDeleting} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="px-5 py-2 bg-[#D0021B] text-white text-[13px] font-semibold rounded hover:bg-[#B00216] disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          >
+            {isDeleting ? "Deleting…" : "Delete Schedule"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ViewInvoiceModal({
+  invoice,
+  onClose,
+}: {
+  invoice: Invoice;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[480px] rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div>
+            <div className="font-mono text-[11px] text-[#2855A6] font-semibold">{invoice.id}</div>
+            <h3 className="text-[16px] font-semibold text-foreground mt-0.5">{invoice.client}</h3>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><XCircle size={18} /></button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 text-[12px]">
+          <div>
+            <span className="text-muted-foreground block text-[11px]">Service Description</span>
+            <span className="font-medium text-foreground">{invoice.service}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground block text-[11px]">Total (incl. GST)</span>
+            <span className="font-bold text-foreground text-[14px]">{AUD(invoice.amount + invoice.gst)}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground block text-[11px]">Issue Date</span>
+            <span className="text-foreground">{invoice.issued || "—"}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground block text-[11px]">Due Date</span>
+            <span className="text-foreground">{invoice.due}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground block text-[11px]">Status</span>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${invoiceStatusColor(invoice.status)}`}>{invoice.status}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground block text-[11px]">Xero Invoice</span>
+            <span className="font-mono text-foreground">{invoice.xeroInvoiceNo || "Not synced"}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground block text-[11px]">Square Status</span>
+            <span className="text-foreground">{invoice.squareStatus}</span>
+          </div>
+          {invoice.squarePaymentId && (
+            <div>
+              <span className="text-muted-foreground block text-[11px]">Square Payment ID</span>
+              <span className="font-mono text-foreground">{invoice.squarePaymentId}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end pt-3 border-t border-border">
+          <button onClick={onClose} className="px-4 py-1.5 bg-[#2855A6] text-white text-[12px] font-semibold rounded hover:bg-[#1F4491] transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditInvoiceModal({
+  invoice,
+  onClose,
+  onSaved,
+}: {
+  invoice: Invoice;
+  onClose: () => void;
+  onSaved: (updated: Invoice) => void;
+}) {
+  const [client, setClient] = useState(invoice.client);
+  const [service, setService] = useState(invoice.service);
+  const [amount, setAmount] = useState(invoice.amount);
+  const [due, setDue] = useState(invoice.due);
+  const [status, setStatus] = useState<InvoiceStatus>(invoice.status);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!client.trim() || !service.trim()) {
+      setError("Client and service description are required");
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const updated = await billing.updateInvoice(invoice.id, {
+        client: client.trim(),
+        service: service.trim(),
+        amount: Number(amount),
+        due: due.trim(),
+        status,
+      });
+      onSaved(updated);
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || "Failed to update invoice");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[500px] max-h-[90vh] overflow-y-auto rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-[16px] font-semibold text-foreground">Edit Invoice</h3>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Modify invoice parameters for <span className="font-mono text-[#2855A6] font-semibold">{invoice.id}</span></p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><XCircle size={18} /></button>
+        </div>
+
+        {error && (
+          <div className="p-2.5 bg-[#FCE8EB] border border-[#D0021B]/30 rounded text-[12px] text-[#D0021B]">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-3 text-[13px]">
+          <div>
+            <label className="block font-medium text-foreground mb-1">Client Name *</label>
+            <input
+              value={client}
+              onChange={e => setClient(e.target.value)}
+              className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+            />
+          </div>
+
+          <div>
+            <label className="block font-medium text-foreground mb-1">Service Description *</label>
+            <input
+              value={service}
+              onChange={e => setService(e.target.value)}
+              className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-foreground mb-1">Amount (excl. GST) *</label>
+              <input
+                type="number"
+                step="0.01"
+                value={amount}
+                onChange={e => setAmount(Number(e.target.value))}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              />
+            </div>
+            <div>
+              <label className="block font-medium text-foreground mb-1">Due Date</label>
+              <input
+                value={due}
+                onChange={e => setDue(e.target.value)}
+                placeholder="e.g. 28 Oct 2024"
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-medium text-foreground mb-1">Status</label>
+            <select
+              value={status}
+              onChange={e => setStatus(e.target.value as InvoiceStatus)}
+              className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+            >
+              <option value="Draft">Draft</option>
+              <option value="Sent">Sent</option>
+              <option value="Due">Due</option>
+              <option value="Overdue">Overdue</option>
+              <option value="Paid">Paid</option>
+              <option value="Voided">Voided</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-3 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">Cancel</button>
+          <button
+            disabled={isSubmitting || !client.trim() || !service.trim() || !amount}
+            onClick={handleSave}
+            className="px-5 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          >
+            {isSubmitting ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteInvoiceModal({
+  invoice,
+  onClose,
+  onDeleted,
+}: {
+  invoice: Invoice;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await billing.deleteInvoice(invoice.id);
+      onDeleted();
+      onClose();
+    } catch {
+      onDeleted();
+      onClose();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[440px] rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#FCE8EB] text-[#D0021B] flex items-center justify-center shrink-0">
+            <Trash2 size={20} />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-semibold text-foreground">Delete Invoice?</h3>
+            <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
+              Are you sure you want to delete invoice <span className="font-mono text-[11px] font-semibold text-foreground">{invoice.id}</span> ({AUD(invoice.amount + invoice.gst)}) for <strong>{invoice.client}</strong>? This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <button onClick={onClose} disabled={isDeleting} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="px-5 py-2 bg-[#D0021B] text-white text-[13px] font-semibold rounded hover:bg-[#B00216] disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          >
+            {isDeleting ? "Deleting…" : "Delete Invoice"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditPaymentModal({
+  payment,
+  onClose,
+  onSaved,
+}: {
+  payment: Payment;
+  onClose: () => void;
+  onSaved: (updated: Payment) => void;
+}) {
+  const [method, setMethod] = useState(payment.method);
+  const [amount, setAmount] = useState(payment.amount);
+  const [status, setStatus] = useState<SquareStatus>(payment.status);
+  const [xeroReconciled, setXeroReconciled] = useState(payment.xeroReconciled);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const updated = await billing.updatePayment(payment.id, {
+        method,
+        amount: Number(amount),
+        status,
+        xeroReconciled,
+      });
+      onSaved(updated);
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || "Failed to update payment");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[480px] max-h-[90vh] overflow-y-auto rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-[16px] font-semibold text-foreground">Edit Payment Record</h3>
+            <p className="text-[12px] text-muted-foreground mt-0.5">Modify record for <span className="font-mono text-[#2855A6] font-semibold">{payment.id}</span> ({payment.client})</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><XCircle size={18} /></button>
+        </div>
+
+        {error && (
+          <div className="p-2.5 bg-[#FCE8EB] border border-[#D0021B]/30 rounded text-[12px] text-[#D0021B]">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-3 text-[13px]">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-foreground mb-1">Payment Method</label>
+              <select
+                value={method}
+                onChange={e => setMethod(e.target.value)}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="Credit Card">Credit Card</option>
+                <option value="Direct Debit">Direct Debit</option>
+                <option value="Square POS">Square POS</option>
+                <option value="EFT Transfer">EFT Transfer</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-medium text-foreground mb-1">Amount (AUD)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={amount}
+                onChange={e => setAmount(Number(e.target.value))}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium text-foreground mb-1">Status</label>
+              <select
+                value={status}
+                onChange={e => setStatus(e.target.value as SquareStatus)}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="Paid">Paid</option>
+                <option value="Pending">Pending</option>
+                <option value="Failed">Failed</option>
+                <option value="Refunded">Refunded</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-medium text-foreground mb-1">Xero Reconciliation</label>
+              <select
+                value={xeroReconciled ? "yes" : "no"}
+                onChange={e => setXeroReconciled(e.target.value === "yes")}
+                className="w-full px-3 py-2 bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6]"
+              >
+                <option value="yes">Reconciled</option>
+                <option value="no">Pending Reconciliation</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-3 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">Cancel</button>
+          <button
+            disabled={isSubmitting || !amount}
+            onClick={handleSave}
+            className="px-5 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          >
+            {isSubmitting ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeletePaymentModal({
+  payment,
+  onClose,
+  onDeleted,
+}: {
+  payment: Payment;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await billing.deletePayment(payment.id);
+      onDeleted();
+      onClose();
+    } catch {
+      onDeleted();
+      onClose();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card w-[440px] rounded-xl p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#FCE8EB] text-[#D0021B] flex items-center justify-center shrink-0">
+            <Trash2 size={20} />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-semibold text-foreground">Delete Payment Record?</h3>
+            <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
+              Are you sure you want to delete payment record <span className="font-mono text-[11px] font-semibold text-foreground">{payment.id}</span> ({AUD(payment.amount)}) for <strong>{payment.client}</strong>? This ledger entry will be removed.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <button onClick={onClose} disabled={isDeleting} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground">
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="px-5 py-2 bg-[#D0021B] text-white text-[13px] font-semibold rounded hover:bg-[#B00216] disabled:opacity-40 transition-colors flex items-center gap-1.5"
+          >
+            {isDeleting ? "Deleting…" : "Delete Payment"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Billing & Payments Screen ────────────────────────────────────────────────
 
 function BillingScreen() {
@@ -1033,64 +1817,65 @@ function BillingScreen() {
   const [squareConn, setSquareConn] = useState<SquareConnection>("connected");
   const [xeroConn] = useState<XeroConnection>("connected");
   const [showNewSchedule, setShowNewSchedule] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [showSquareConnect, setShowSquareConnect] = useState(false);
   const [schedules, setSchedules] = useState<BillingSchedule[]>(() => {
     try {
       const raw = localStorage.getItem("entiq_mock_schedules");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          const missing = SCHEDULES.filter(s => !parsed.some((p: any) => p.id === s.id || p.client === s.client));
-          if (missing.length > 0) {
-            const merged = [...missing, ...parsed];
-            localStorage.setItem("entiq_mock_schedules", JSON.stringify(merged));
-            return merged;
-          }
-          return parsed;
-        }
-      }
+      if (raw) return JSON.parse(raw);
     } catch {}
     return SCHEDULES;
   });
-  const [invoices] = useState<Invoice[]>(() => {
+  const [invoices, setInvoices] = useState<Invoice[]>(() => {
     try {
       const raw = localStorage.getItem("entiq_mock_invoices");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          const missing = INVOICES.filter(s => !parsed.some((p: any) => p.id === s.id || p.client === s.client));
-          if (missing.length > 0) {
-            const merged = [...missing, ...parsed];
-            localStorage.setItem("entiq_mock_invoices", JSON.stringify(merged));
-            return merged;
-          }
-          return parsed;
-        }
-      }
+      if (raw) return JSON.parse(raw);
     } catch {}
     return INVOICES;
   });
-  const [payments] = useState<Payment[]>(() => {
+  const [payments, setPayments] = useState<Payment[]>(() => {
     try {
       const raw = localStorage.getItem("entiq_mock_payments");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          const missing = PAYMENTS.filter(s => !parsed.some((p: any) => p.id === s.id || p.client === s.client));
-          if (missing.length > 0) {
-            const merged = [...missing, ...parsed];
-            localStorage.setItem("entiq_mock_payments", JSON.stringify(merged));
-            return merged;
-          }
-          return parsed;
-        }
-      }
+      if (raw) return JSON.parse(raw);
     } catch {}
     return PAYMENTS;
   });
   const [raiseModal, setRaiseModal] = useState<Invoice | null>(null);
   const [selectedSchedule, setSelectedSchedule] = useState<BillingSchedule | null>(null);
+  const [editingSchedule, setEditingSchedule] = useState<BillingSchedule | null>(null);
+  const [deletingSchedule, setDeletingSchedule] = useState<BillingSchedule | null>(null);
+  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [deletingInvoice, setDeletingInvoice] = useState<Invoice | null>(null);
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+  const [deletingPayment, setDeletingPayment] = useState<Payment | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+
+  // Close 3-dots action menu when clicking anywhere outside
+  useEffect(() => {
+    const handleGlobalClick = () => setOpenMenuId(null);
+    window.addEventListener("click", handleGlobalClick);
+    return () => window.removeEventListener("click", handleGlobalClick);
+  }, []);
+
+  // Load from SQLite database via API
+  useEffect(() => {
+    let mounted = true;
+    billing.listSchedules().then(res => {
+      if (mounted && res?.items) setSchedules(res.items);
+    }).catch(console.error);
+
+    billing.listInvoices().then(res => {
+      if (mounted && res?.items) setInvoices(res.items);
+    }).catch(console.error);
+
+    billing.listPayments().then(res => {
+      if (mounted && res?.items) setPayments(res.items);
+    }).catch(console.error);
+
+    return () => { mounted = false; };
+  }, []);
 
   const filteredSchedules = schedules.filter(s => !search || s.client.toLowerCase().includes(search.toLowerCase()) || s.service.toLowerCase().includes(search.toLowerCase()));
   const filteredInvoices = invoices.filter(i => !search || i.client.toLowerCase().includes(search.toLowerCase()) || i.id.toLowerCase().includes(search.toLowerCase()));
@@ -1121,7 +1906,15 @@ function BillingScreen() {
       {showNewSchedule && (
         <NewScheduleModal
           onClose={() => setShowNewSchedule(false)}
-          onCreated={s => setSchedules(prev => [s, ...prev])}
+          onCreated={async s => {
+            setSchedules(prev => [s, ...prev]);
+            try {
+              const created = await billing.createSchedule(s);
+              setSchedules(prev => prev.map(item => item.id === s.id ? created : item));
+            } catch (err) {
+              console.error("Failed to persist schedule to DB", err);
+            }
+          }}
           squareConn={squareConn}
           xeroConn={xeroConn}
         />
@@ -1138,6 +1931,9 @@ function BillingScreen() {
           xeroConn={xeroConn}
           squareConn={squareConn}
           onClose={() => setRaiseModal(null)}
+          onRaised={updated => {
+            setInvoices(prev => prev.map(i => i.id === updated.id ? updated : i));
+          }}
         />
       )}
       {selectedSchedule && (
@@ -1152,10 +1948,82 @@ function BillingScreen() {
           onUpdateSchedule={updated => {
             setSchedules(prev => prev.map(s => s.id === updated.id ? updated : s));
             setSelectedSchedule(updated);
+            billing.updateSchedule(updated.id, updated).catch(err => {
+              console.error("Failed to update schedule in DB", err);
+            });
           }}
           onDeleteSchedule={id => {
             setSchedules(prev => prev.filter(s => s.id !== id));
             setSelectedSchedule(null);
+            billing.deleteSchedule(id).catch(err => {
+              console.error("Failed to delete schedule in DB", err);
+            });
+          }}
+        />
+      )}
+      {selectedPayment && (
+        <PaymentDetailModal
+          payment={selectedPayment}
+          onClose={() => setSelectedPayment(null)}
+        />
+      )}
+      {editingSchedule && (
+        <EditScheduleModal
+          schedule={editingSchedule}
+          onClose={() => setEditingSchedule(null)}
+          onSaved={updated => {
+            setSchedules(prev => prev.map(s => s.id === updated.id ? updated : s));
+          }}
+        />
+      )}
+      {deletingSchedule && (
+        <DeleteScheduleModal
+          schedule={deletingSchedule}
+          onClose={() => setDeletingSchedule(null)}
+          onDeleted={() => {
+            setSchedules(prev => prev.filter(s => s.id !== deletingSchedule.id));
+          }}
+        />
+      )}
+      {viewingInvoice && (
+        <ViewInvoiceModal
+          invoice={viewingInvoice}
+          onClose={() => setViewingInvoice(null)}
+        />
+      )}
+      {editingInvoice && (
+        <EditInvoiceModal
+          invoice={editingInvoice}
+          onClose={() => setEditingInvoice(null)}
+          onSaved={updated => {
+            setInvoices(prev => prev.map(i => i.id === updated.id ? updated : i));
+          }}
+        />
+      )}
+      {deletingInvoice && (
+        <DeleteInvoiceModal
+          invoice={deletingInvoice}
+          onClose={() => setDeletingInvoice(null)}
+          onDeleted={() => {
+            setInvoices(prev => prev.filter(i => i.id !== deletingInvoice.id));
+          }}
+        />
+      )}
+      {editingPayment && (
+        <EditPaymentModal
+          payment={editingPayment}
+          onClose={() => setEditingPayment(null)}
+          onSaved={updated => {
+            setPayments(prev => prev.map(p => p.id === updated.id ? updated : p));
+          }}
+        />
+      )}
+      {deletingPayment && (
+        <DeletePaymentModal
+          payment={deletingPayment}
+          onClose={() => setDeletingPayment(null)}
+          onDeleted={() => {
+            setPayments(prev => prev.filter(p => p.id !== deletingPayment.id));
           }}
         />
       )}
@@ -1189,9 +2057,9 @@ function BillingScreen() {
             { label: "Overdue invoices", value: overdueInvoices, color: "text-[#D0021B]", bg: "bg-[#FCE8EB]" },
             { label: "Active schedules", value: schedules.filter(s => s.status === "Active").length, color: "text-[#2855A6]", bg: "bg-[#EEF2FA]" },
           ].map(s => (
-            <div key={s.label} className="bg-card border border-border rounded-lg px-4 py-3">
-              <div className="text-[11px] text-muted-foreground mb-1">{s.label}</div>
-              <div className={`text-[22px] font-bold ${s.color}`}>{s.value}</div>
+            <div key={s.label} className="bg-card border border-border rounded-lg px-3 py-2">
+              <div className="text-[10px] text-muted-foreground mb-0.5">{s.label}</div>
+              <div className={`text-[18px] font-bold ${s.color}`}>{s.value}</div>
             </div>
           ))}
         </div>
@@ -1224,34 +2092,111 @@ function BillingScreen() {
 
         {/* ── Schedules tab ── */}
         {tab === "schedules" && (
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <table className="w-full text-[12px]">
+          <div className="bg-card border border-border rounded-lg overflow-x-auto">
+            <table className="w-full text-[12px] min-w-[980px]">
               <thead>
                 <tr className="border-b border-border bg-[#FAFAFA]">
-                  {["Schedule ID", "Client", "Service", "Type", "Fee (excl. GST)", "Next billing", "Square", "Adviser", "Status", ""].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
-                  ))}
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Schedule ID</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Client</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Service</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Type</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Fee (excl. GST)</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Next billing</th>
+                  <th className="text-left px-2.5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Square</th>
+                  <th className="text-left px-2.5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Adviser</th>
+                  <th className="text-left px-2.5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Status</th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap w-16">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredSchedules.map((s, i) => (
                   <tr key={s.id} onClick={() => setSelectedSchedule(s)} className={`border-b border-border last:border-0 hover:bg-[#F8FAFF] cursor-pointer transition-colors ${i % 2 !== 0 ? "bg-[#FAFAFA]/50" : ""}`}>
-                    <td className="px-4 py-3"><span className="font-mono text-[11px] text-[#2855A6]">{s.id}</span></td>
-                    <td className="px-4 py-3 font-medium text-foreground max-w-[140px] truncate">{s.client}</td>
-                    <td className="px-4 py-3 text-muted-foreground max-w-[160px] truncate">{s.service}</td>
-                    <td className="px-4 py-3"><ScheduleTypeBadge type={s.type} /></td>
-                    <td className="px-4 py-3 font-semibold text-foreground">{AUD(s.amount)}</td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{s.nextDue}</td>
-                    <td className="px-4 py-3">
-                      {s.squareSubscriptionId
-                        ? <span className="flex items-center gap-1 text-[11px] font-semibold text-foreground"><span className="w-4 h-4 rounded bg-black flex items-center justify-center text-white text-[7px] font-bold">SQ</span>{s.squareSubscriptionId.slice(0, 10)}</span>
-                        : <span className="text-[11px] text-muted-foreground">—</span>}
+                    <td className="px-3 py-2.5"><span className="font-mono text-[11px] text-[#2855A6]">{s.id}</span></td>
+                    <td className="px-3 py-2.5 font-medium text-foreground max-w-[130px] truncate">{s.client}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground max-w-[140px] truncate">{s.service}</td>
+                    <td className="px-3 py-2.5"><ScheduleTypeBadge type={s.type} /></td>
+                    <td className="px-3 py-2.5 font-semibold text-foreground whitespace-nowrap">{AUD(s.amount)}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{s.nextDue}</td>
+                    <td className="px-2.5 py-2.5" onClick={e => e.stopPropagation()}>
+                      {s.squareSubscriptionId ? (
+                        <div className="relative group inline-block">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSchedule(s)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-[#3E4348]/10 hover:bg-[#3E4348]/20 text-foreground transition-colors cursor-pointer border border-border/80"
+                          >
+                            <span className="w-3.5 h-3.5 rounded bg-black flex items-center justify-center text-white text-[7px] font-bold shrink-0">SQ</span>
+                            <span>Linked</span>
+                          </button>
+                          {/* Tooltip on hover */}
+                          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:flex flex-col gap-0.5 z-50 bg-[#1E293B] text-white px-2.5 py-1.5 rounded-md shadow-xl text-[10px] whitespace-nowrap pointer-events-none">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-400">Subscription:</span>
+                              <span className="font-mono text-white font-semibold">{s.squareSubscriptionId}</span>
+                            </div>
+                            <span className="text-[9px] text-slate-400">Click to view schedule details</span>
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#1E293B]" />
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">—</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{s.adviser}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-2.5 py-2.5 text-muted-foreground whitespace-nowrap">{s.adviser}</td>
+                    <td className="px-2.5 py-2.5">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${s.status === "Active" ? "bg-[#E8F7EB] text-[#1E7A31]" : s.status === "Paused" ? "bg-[#FEF6E9] text-[#B87A1A]" : "bg-[#F0F0F0] text-[#6F6F6F]"}`}>{s.status}</span>
                     </td>
-                    <td className="px-4 py-3"><button onClick={e => e.stopPropagation()} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><MoreHorizontal size={14} /></button></td>
+                    <td className="px-3 py-2.5 text-right relative pr-3" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId(openMenuId === s.id ? null : s.id);
+                        }}
+                        className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center justify-center"
+                        title="Actions"
+                      >
+                        <MoreHorizontal size={15} />
+                      </button>
+
+                      {openMenuId === s.id && (
+                        <div
+                          onClick={e => e.stopPropagation()}
+                          className="absolute right-2 top-8 w-36 bg-card border border-border rounded-lg shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 text-left"
+                        >
+                          <button
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              setSelectedSchedule(s);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-foreground hover:bg-[#EEF2FA] hover:text-[#2855A6] transition-colors"
+                          >
+                            <Eye size={13} className="text-[#2855A6]" />
+                            <span>View</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              setEditingSchedule(s);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-foreground hover:bg-[#FEF6E9] hover:text-[#B87A1A] transition-colors"
+                          >
+                            <Pencil size={13} className="text-[#F5A623]" />
+                            <span>Edit</span>
+                          </button>
+                          <div className="my-1 border-t border-border" />
+                          <button
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              setDeletingSchedule(s);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[#D0021B] hover:bg-[#FCE8EB] transition-colors"
+                          >
+                            <Trash2 size={13} />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1264,38 +2209,92 @@ function BillingScreen() {
 
         {/* ── Invoices tab ── */}
         {tab === "invoices" && (
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <table className="w-full text-[12px]">
+          <div className="bg-card border border-border rounded-lg overflow-x-auto">
+            <table className="w-full text-[12px] min-w-[960px]">
               <thead>
                 <tr className="border-b border-border bg-[#FAFAFA]">
-                  {["Invoice", "Client", "Description", "Amount", "Due", "Status", "Xero", "Square", ""].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
-                  ))}
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Invoice</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Client</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Description</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Amount</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Due</th>
+                  <th className="text-left px-2.5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Status</th>
+                  <th className="text-left px-2.5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Xero</th>
+                  <th className="text-left px-2.5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Square</th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap w-24">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredInvoices.map((inv, i) => (
                   <tr key={inv.id} className={`border-b border-border last:border-0 hover:bg-[#F8FAFF] transition-colors ${i % 2 !== 0 ? "bg-[#FAFAFA]/50" : ""}`}>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2.5">
                       <div className="font-mono text-[11px] text-[#2855A6]">{inv.id}</div>
                       {inv.xeroInvoiceNo && <div className="font-mono text-[10px] text-muted-foreground">{inv.xeroInvoiceNo}</div>}
                     </td>
-                    <td className="px-4 py-3 font-medium text-foreground max-w-[130px] truncate">{inv.client}</td>
-                    <td className="px-4 py-3 text-muted-foreground max-w-[170px] truncate">{inv.service}</td>
-                    <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{AUD(inv.amount + inv.gst)}</td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{inv.due}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2.5 font-medium text-foreground max-w-[130px] truncate">{inv.client}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground max-w-[160px] truncate">{inv.service}</td>
+                    <td className="px-3 py-2.5 font-semibold text-foreground whitespace-nowrap">{AUD(inv.amount + inv.gst)}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{inv.due}</td>
+                    <td className="px-2.5 py-2.5">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${invoiceStatusColor(inv.status)}`}>{inv.status}</span>
                     </td>
-                    <td className="px-4 py-3">{xeroStatusEl(inv.xeroStatus)}</td>
-                    <td className="px-4 py-3">{squareStatusEl(inv.squareStatus)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
+                    <td className="px-2.5 py-2.5">{xeroStatusEl(inv.xeroStatus)}</td>
+                    <td className="px-2.5 py-2.5">{squareStatusEl(inv.squareStatus)}</td>
+                    <td className="px-3 py-2.5 text-right relative pr-3" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
                         {inv.status === "Draft" && (
                           <button onClick={() => setRaiseModal(inv)} className="px-2 py-1 text-[10px] font-semibold text-[#2855A6] border border-[#2855A6]/30 rounded hover:bg-[#EEF2FA] transition-colors whitespace-nowrap">Raise</button>
                         )}
-                        <button className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><MoreHorizontal size={14} /></button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuId(openMenuId === inv.id ? null : inv.id);
+                          }}
+                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center justify-center"
+                          title="Actions"
+                        >
+                          <MoreHorizontal size={15} />
+                        </button>
                       </div>
+
+                      {openMenuId === inv.id && (
+                        <div
+                          onClick={e => e.stopPropagation()}
+                          className="absolute right-2 top-8 w-36 bg-card border border-border rounded-lg shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 text-left"
+                        >
+                          <button
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              setViewingInvoice(inv);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-foreground hover:bg-[#EEF2FA] hover:text-[#2855A6] transition-colors"
+                          >
+                            <Eye size={13} className="text-[#2855A6]" />
+                            <span>View</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              setEditingInvoice(inv);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-foreground hover:bg-[#FEF6E9] hover:text-[#B87A1A] transition-colors"
+                          >
+                            <Pencil size={13} className="text-[#F5A623]" />
+                            <span>Edit</span>
+                          </button>
+                          <div className="my-1 border-t border-border" />
+                          <button
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              setDeletingInvoice(inv);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[#D0021B] hover:bg-[#FCE8EB] transition-colors"
+                          >
+                            <Trash2 size={13} />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1309,38 +2308,122 @@ function BillingScreen() {
 
         {/* ── Payments tab ── */}
         {tab === "payments" && (
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <table className="w-full text-[12px]">
+          <div className="bg-card border border-border rounded-lg overflow-x-auto">
+            <table className="w-full text-[12px] min-w-[980px]">
               <thead>
                 <tr className="border-b border-border bg-[#FAFAFA]">
-                  {["Payment ID", "Client", "Invoice", "Amount", "Method", "Date", "Square Tx", "Xero", "Status", ""].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
-                  ))}
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Payment ID</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Client</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Invoice</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Amount</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Method</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Date</th>
+                  <th className="text-left px-2.5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Square Tx</th>
+                  <th className="text-left px-2.5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Xero</th>
+                  <th className="text-left px-2.5 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Status</th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap w-16">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredPayments.map((p, i) => (
-                  <tr key={p.id} className={`border-b border-border last:border-0 hover:bg-[#F8FAFF] transition-colors ${i % 2 !== 0 ? "bg-[#FAFAFA]/50" : ""}`}>
-                    <td className="px-4 py-3"><span className="font-mono text-[11px] text-[#2855A6]">{p.id}</span></td>
-                    <td className="px-4 py-3 font-medium text-foreground max-w-[130px] truncate">{p.client}</td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{p.invoiceId}</td>
-                    <td className="px-4 py-3 font-semibold text-foreground">{AUD(p.amount)}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{p.method}</td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{p.date}</td>
-                    <td className="px-4 py-3">
-                      {p.squareTxId
-                        ? <span className="flex items-center gap-1 text-[11px] text-foreground font-mono"><span className="w-4 h-4 rounded bg-black flex items-center justify-center text-white text-[7px] font-bold shrink-0">SQ</span>{p.squareTxId.slice(0, 12)}</span>
-                        : <span className="text-muted-foreground">—</span>}
+                  <tr
+                    key={p.id}
+                    onClick={() => setSelectedPayment(p)}
+                    className={`border-b border-border last:border-0 hover:bg-[#F8FAFF] cursor-pointer transition-colors ${i % 2 !== 0 ? "bg-[#FAFAFA]/50" : ""}`}
+                  >
+                    <td className="px-3 py-2.5"><span className="font-mono text-[11px] text-[#2855A6]">{p.id}</span></td>
+                    <td className="px-3 py-2.5 font-medium text-foreground max-w-[130px] truncate">{p.client}</td>
+                    <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground">{p.invoiceId}</td>
+                    <td className="px-3 py-2.5 font-semibold text-foreground whitespace-nowrap">{AUD(p.amount)}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{p.method}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{p.date}</td>
+                    <td className="px-2.5 py-2.5">
+                      {p.squareTxId ? (
+                        <div className="relative group inline-block">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedPayment(p);
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-[#3E4348]/10 hover:bg-[#3E4348]/20 text-foreground transition-colors cursor-pointer border border-border/80"
+                          >
+                            <span className="w-3.5 h-3.5 rounded bg-black flex items-center justify-center text-white text-[7px] font-bold shrink-0">SQ</span>
+                            <span>View Tx</span>
+                          </button>
+                          {/* Tooltip on hover */}
+                          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:flex flex-col gap-0.5 z-50 bg-[#1E293B] text-white px-2.5 py-1.5 rounded-md shadow-xl text-[10px] whitespace-nowrap pointer-events-none">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-400">Square Tx:</span>
+                              <span className="font-mono text-white font-semibold">{p.squareTxId}</span>
+                            </div>
+                            <span className="text-[9px] text-slate-400">Click to view details & copy</span>
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#1E293B]" />
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-2.5 py-2.5">
                       {p.xeroReconciled
                         ? <span className="flex items-center gap-1 text-[#2EA843] text-[11px] font-semibold"><CheckCircle size={11} />Reconciled</span>
                         : <span className="flex items-center gap-1 text-[#F5A623] text-[11px] font-semibold"><Clock size={11} />Pending</span>}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-2.5 py-2.5">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${paymentStatusColor(p.status)}`}>{p.status}</span>
                     </td>
-                    <td className="px-4 py-3"><button className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><MoreHorizontal size={14} /></button></td>
+                    <td className="px-3 py-2.5 text-right relative pr-3" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId(openMenuId === p.id ? null : p.id);
+                        }}
+                        className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center justify-center"
+                        title="Actions"
+                      >
+                        <MoreHorizontal size={15} />
+                      </button>
+
+                      {openMenuId === p.id && (
+                        <div
+                          onClick={e => e.stopPropagation()}
+                          className="absolute right-2 top-8 w-36 bg-card border border-border rounded-lg shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 text-left"
+                        >
+                          <button
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              setSelectedPayment(p);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-foreground hover:bg-[#EEF2FA] hover:text-[#2855A6] transition-colors"
+                          >
+                            <Eye size={13} className="text-[#2855A6]" />
+                            <span>View</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              setEditingPayment(p);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-foreground hover:bg-[#FEF6E9] hover:text-[#B87A1A] transition-colors"
+                          >
+                            <Pencil size={13} className="text-[#F5A623]" />
+                            <span>Edit</span>
+                          </button>
+                          <div className="my-1 border-t border-border" />
+                          <button
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              setDeletingPayment(p);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[#D0021B] hover:bg-[#FCE8EB] transition-colors"
+                          >
+                            <Trash2 size={13} />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

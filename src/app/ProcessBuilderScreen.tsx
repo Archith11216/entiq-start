@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { Plus, Search, ChevronDown, ChevronRight, ChevronLeft, Trash2, Copy, GitBranch, Fingerprint, ScanFace, FileCheck, CreditCard, MessageSquare, UserCog, Network, Pen, ZoomIn, ZoomOut, Maximize2, Play, Save, RotateCcw, Sparkles, Wand2, Pencil, BookOpen, Scale, Briefcase, Hash, List, PenLine, CheckSquare, X, Users, FileText, Shield, CheckCircle, UserCheck, Layers, Workflow, AlertTriangle, Building2, Eye } from "lucide-react";
+import { workflows as workflowsApi } from "../lib/api";
 
 // ─── Process Builder ─────────────────────────────────────────────────────────
 
-const STEP_W = 210;
-const STEP_H = 82;
+const STEP_W = 170;
+const STEP_H = 66;
 
 interface PaletteItem {
   type: string;
@@ -529,6 +530,36 @@ function ProcessBuilderScreen() {
     return () => { document.removeEventListener("keydown", onKeyDown); document.removeEventListener("keyup", onKeyUp); };
   }, []); // eslint-disable-line
 
+  // ── Load workflow from SQLite DB ─────────────────────────────────────────────
+  useEffect(() => {
+    let mounted = true;
+    workflowsApi.get("default-client-onboarding").then(wf => {
+      if (!mounted || !wf) return;
+      if (wf.nodesJson && wf.nodesJson !== "[]") {
+        try {
+          const parsedNodes: any[] = JSON.parse(wf.nodesJson);
+          const rehydrated = parsedNodes.map(n => {
+            const pal = PALETTE.find(p => p.type === n.type) || customSteps.find(c => c.type === n.type);
+            return {
+              ...n,
+              icon: pal ? pal.icon : <Workflow size={14} />,
+            };
+          });
+          const parsedEdges: FlowEdge[] = JSON.parse(wf.edgesJson || "[]");
+          if (rehydrated.length > 0) {
+            setNodes(rehydrated);
+            setEdges(parsedEdges);
+            if (wf.name) setProcessName(wf.name);
+            if (wf.status) setIsDraft(wf.status === "Draft");
+          }
+        } catch (e) {
+          console.error("Failed to parse workflow from DB", e);
+        }
+      }
+    }).catch(console.error);
+    return () => { mounted = false; };
+  }, []); // eslint-disable-line
+
   // ── [4] Template loading with confirmation ────────────────────────────────────
   function loadTemplate(key: string, skipConfirm = false) {
     if (!skipConfirm && nodes.length > 0 && !window.confirm("Load template? This will replace your current canvas.")) return;
@@ -692,16 +723,38 @@ function ProcessBuilderScreen() {
   }
 
   // ── [13] Save / Publish ───────────────────────────────────────────────────────
-  function handleSave() {
+  function handleSave(publishOverride?: boolean) {
     setSavedMsg(true);
     setVersion(v => v + 1);
     setLastSaved(new Date());
     setTimeout(() => setSavedMsg(false), 2500);
+
+    const isPublished = publishOverride !== undefined ? publishOverride : !isDraft;
+    const serializableNodes = nodes.map(n => ({
+      id: n.id,
+      type: n.type,
+      label: n.label,
+      x: n.x,
+      y: n.y,
+      color: n.color,
+      bg: n.bg,
+      description: n.description,
+      config: n.config,
+      integration: n.integration,
+    }));
+    workflowsApi.save({
+      id: "default-client-onboarding",
+      name: processName || "Default Client Onboarding Flow",
+      description: "Interactive automated client onboarding workflow",
+      nodesJson: JSON.stringify(serializableNodes),
+      edgesJson: JSON.stringify(edges),
+      status: isPublished ? "Active" : "Draft",
+    }).catch(err => console.error("Failed to save workflow to DB", err));
   }
 
   function handlePublish() {
     setIsDraft(false);
-    handleSave();
+    handleSave(true);
   }
 
   // ── AI ────────────────────────────────────────────────────────────────────────
@@ -845,13 +898,13 @@ function ProcessBuilderScreen() {
                 { label: "Branches", value: edges.filter(e => e.condition !== "always").length },
                 { label: "Connections", value: edges.length },
               ].map(s => (
-                <div key={s.label} className="bg-card border border-border rounded-lg p-3 text-center">
-                  <div className="text-[20px] font-bold text-foreground">{s.value}</div>
-                  <div className="text-[10px] text-muted-foreground">{s.label}</div>
+                <div key={s.label} className="bg-card border border-border rounded-lg p-2 text-center">
+                  <div className="text-[16px] font-bold text-foreground">{s.value}</div>
+                  <div className="text-[9px] text-muted-foreground">{s.label}</div>
                 </div>
               ))}
             </div>
-            <div className="bg-card border border-border rounded-lg p-4">
+            <div className="bg-card border border-border rounded-lg p-3">
               <p className="text-[12px] font-semibold text-foreground mb-3">Main path ({previewSteps.length} steps)</p>
               {previewSteps.map((node, i) => (
                 <div key={node.id} className="flex items-start gap-3">
@@ -1151,8 +1204,8 @@ function ProcessBuilderScreen() {
                     {items.map(item => (
                       <div key={item.type} draggable onDragStart={e => handlePaletteDragStart(e, item.type)}
                         title={item.price && item.price !== "Free" ? `Cost: ${item.price} per check — ${item.description}` : item.description}
-                        className="mx-3 mb-1.5 flex items-start gap-2.5 p-2.5 rounded-lg border border-border bg-[#FAFAFA] cursor-grab hover:border-[#2855A6]/40 hover:bg-[#EEF2FA]/50 hover:shadow-sm transition-all active:cursor-grabbing">
-                        <div className="w-6 h-6 rounded flex items-center justify-center shrink-0 mt-0.5" style={{ background: item.bg, color: item.color }}>{item.icon}</div>
+                        className="mx-2.5 mb-1 flex items-start gap-2 p-2 rounded-md border border-border bg-[#FAFAFA] cursor-grab hover:border-[#2855A6]/40 hover:bg-[#EEF2FA]/50 hover:shadow-sm transition-all active:cursor-grabbing">
+                        <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5 [&_svg]:size-3.5" style={{ background: item.bg, color: item.color }}>{item.icon}</div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-[11px] font-semibold text-foreground leading-tight">{item.label}</span>
@@ -1161,7 +1214,7 @@ function ProcessBuilderScreen() {
                             {/* [15] Price shown inline */}
                             {item.price && item.price !== "Free" && <span className="text-[8px] text-[#D97706] font-semibold shrink-0">{item.price}</span>}
                           </div>
-                          <div className="text-[10px] text-muted-foreground leading-tight mt-0.5">{item.description.split(" — ")[0]}</div>
+                          <div className="text-[9.5px] text-muted-foreground leading-tight mt-0.5">{item.description.split(" — ")[0]}</div>
                         </div>
                       </div>
                     ))}
@@ -1340,20 +1393,20 @@ function ProcessBuilderScreen() {
                       <div className="w-1.5 h-1.5 rounded-full bg-card" />
                     </div>
                     {/* Content */}
-                    <div className="pl-4 pr-3 pt-3 pb-2.5 h-full flex flex-col justify-between">
-                      <div className="flex items-start gap-2">
-                        <div className="w-6 h-6 rounded flex items-center justify-center shrink-0" style={{ background: node.bg, color: node.color }}>{node.icon}</div>
+                    <div className="pl-3 pr-2 pt-2 pb-1.5 h-full flex flex-col justify-between">
+                      <div className="flex items-start gap-1.5">
+                        <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 [&_svg]:size-3" style={{ background: node.bg, color: node.color }}>{node.icon}</div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-[12px] font-semibold text-foreground leading-tight truncate">{node.label}</div>
-                          <div className="text-[10px] text-muted-foreground leading-tight mt-0.5 line-clamp-1">{node.description}</div>
+                          <div className="text-[11px] font-semibold text-foreground leading-tight truncate">{node.label}</div>
+                          <div className="text-[9px] text-muted-foreground leading-tight mt-0.5 line-clamp-1">{node.description}</div>
                           {node.integration === "entiq-kyc" && (
-                            <span className="inline-flex items-center gap-0.5 mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#E3F8F5] text-[#20BCA4] border border-[#20BCA4]/20">
-                              <Fingerprint size={8} />Entiq KYC
+                            <span className="inline-flex items-center gap-0.5 mt-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-[#E3F8F5] text-[#20BCA4] border border-[#20BCA4]/20">
+                              <Fingerprint size={7} />Entiq KYC
                             </span>
                           )}
                           {node.integration === "esign" && (
-                            <span className="inline-flex items-center gap-0.5 mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#EEF2FA] text-[#2855A6] border border-[#2855A6]/20">
-                              <Pen size={8} />eSign
+                            <span className="inline-flex items-center gap-0.5 mt-0.5 px-1 py-0.2 rounded text-[8px] font-bold bg-[#EEF2FA] text-[#2855A6] border border-[#2855A6]/20">
+                              <Pen size={7} />eSign
                             </span>
                           )}
                           {/* Notes indicator */}

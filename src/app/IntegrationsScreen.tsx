@@ -205,9 +205,9 @@ function ConnectModal({ integration, onClose }: { integration: Integration; onCl
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-card w-[520px] rounded-xl shadow-2xl overflow-hidden">
-        <div className="px-6 py-5 border-b border-border flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-card w-full max-w-[520px] max-h-[min(90vh,720px)] rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col my-auto">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-card">
           <div className="flex items-center gap-3">
             <div className={`w-9 h-9 rounded-lg ${integration.iconBg} flex items-center justify-center`}>
               <span className={`text-[11px] font-bold ${integration.iconText}`}>{integration.name.slice(0, 2).toUpperCase()}</span>
@@ -221,19 +221,17 @@ function ConnectModal({ integration, onClose }: { integration: Integration; onCl
         </div>
 
         {/* Steps */}
-        <div className="px-6 pt-4 flex items-center gap-2">
+        <div className="px-6 pt-3.5 pb-1 flex items-center gap-2 shrink-0 bg-card">
           {["Authorise", "Permissions", "Confirm"].map((l, i) => (
-            <div key={l} className="flex items-center gap-2 flex-1">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-colors ${i + 1 <= step ? "bg-[#2855A6] text-white" : "bg-[#F0F0F0] text-muted-foreground"}`}>
-                {i + 1 < step || connected ? <CheckCircle size={13} /> : i + 1}
-              </div>
-              <span className={`text-[12px] font-medium ${i + 1 <= step ? "text-foreground" : "text-muted-foreground"}`}>{l}</span>
+            <div key={l} className="flex items-center gap-1.5 flex-1">
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${i + 1 <= step ? "bg-[#2855A6] text-white" : "bg-[#F0F0F0] text-muted-foreground"}`}>{i + 1}</div>
+              <span className={`text-[11px] font-medium ${i + 1 <= step ? "text-foreground" : "text-muted-foreground"}`}>{l}</span>
               {i < 2 && <div className={`flex-1 h-px ${i + 1 < step ? "bg-[#2855A6]" : "bg-border"}`} />}
             </div>
           ))}
         </div>
 
-        <div className="px-6 py-5 space-y-4 min-h-[220px]">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {step === 1 && (
             <>
               <p className="text-[13px] text-muted-foreground">{integration.description}</p>
@@ -309,7 +307,7 @@ function ConnectModal({ integration, onClose }: { integration: Integration; onCl
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-border flex items-center justify-between">
+        <div className="px-6 py-3.5 border-t border-border flex items-center justify-between shrink-0 bg-card">
           <button onClick={() => step > 1 && !connected ? setStep(step - 1) : onClose()} className="px-4 py-2 text-[13px] font-semibold text-muted-foreground hover:text-foreground transition-colors">
             {connected ? "Done" : step === 1 ? "Cancel" : "Back"}
           </button>
@@ -331,9 +329,9 @@ function ConnectModal({ integration, onClose }: { integration: Integration; onCl
 function ConfigureModal({ integration, onClose }: { integration: Integration; onClose: () => void }) {
   const [tab, setTab] = useState("Settings");
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-card w-[580px] rounded-xl shadow-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-card w-full max-w-[580px] max-h-[min(90vh,720px)] rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col my-auto">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-card">
           <div className="flex items-center gap-3">
             <div className={`w-8 h-8 rounded-lg ${integration.iconBg} flex items-center justify-center`}>
               <span className={`text-[10px] font-bold ${integration.iconText}`}>{integration.name.slice(0, 2).toUpperCase()}</span>
@@ -349,13 +347,13 @@ function ConfigureModal({ integration, onClose }: { integration: Integration; on
           </div>
         </div>
 
-        <div className="flex border-b border-border px-6">
+        <div className="flex border-b border-border px-6 shrink-0 bg-card">
           {["Settings", "Permissions", "Logs"].map(t => (
             <button key={t} onClick={() => setTab(t)} className={`px-3 py-2.5 text-[12px] font-semibold border-b-2 transition-colors ${tab === t ? "border-[#2855A6] text-[#2855A6]" : "border-transparent text-muted-foreground hover:text-foreground"}`}>{t}</button>
           ))}
         </div>
 
-        <div className="px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
           {tab === "Settings" && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
@@ -412,7 +410,7 @@ function ConfigureModal({ integration, onClose }: { integration: Integration; on
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-border flex items-center justify-between">
+        <div className="px-6 py-3.5 border-t border-border flex items-center justify-between shrink-0 bg-card">
           <button className="px-3 py-1.5 text-[12px] font-semibold text-[#D0021B] border border-[#D0021B]/30 rounded hover:bg-[#FCE8EB] transition-colors">Disconnect</button>
           <div className="flex gap-2">
             <button onClick={onClose} className="px-4 py-2 text-[13px] font-semibold border border-border rounded hover:bg-muted transition-colors">Close</button>
@@ -464,30 +462,30 @@ function IntegrationsScreen() {
             { label: "Health alerts", value: degradedCount, color: "text-[#F5A623]", bg: "bg-[#FEF6E9]" },
             { label: "Sync errors (24h)", value: 1, color: "text-[#D0021B]", bg: "bg-[#FCE8EB]" },
           ].map(s => (
-            <div key={s.label} className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-lg ${s.bg} flex items-center justify-center`}>
-                <span className={`text-[16px] font-bold ${s.color}`}>{s.value}</span>
+            <div key={s.label} className="bg-card border border-border rounded-lg px-3 py-2 flex items-center gap-2.5">
+              <div className={`w-6 h-6 rounded-md ${s.bg} flex items-center justify-center`}>
+                <span className={`text-[13px] font-bold ${s.color}`}>{s.value}</span>
               </div>
-              <span className="text-[12px] text-muted-foreground">{s.label}</span>
+              <span className="text-[11px] text-muted-foreground">{s.label}</span>
             </div>
           ))}
         </div>
 
         {/* EnTIQ module map */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <div className="px-5 py-3 border-b border-border">
-            <h3 className="text-[13px] font-semibold text-foreground">EnTIQ platform modules</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Integrations are scoped per module. Active modules share the connected provider pool.</p>
+          <div className="px-4 py-2 border-b border-border">
+            <h3 className="text-[12px] font-semibold text-foreground">EnTIQ platform modules</h3>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Integrations are scoped per module. Active modules share the connected provider pool.</p>
           </div>
           <div className="grid grid-cols-3 gap-0">
             {ENTIQ_MODULES.map((m, i) => (
-              <div key={m.id} className={`p-4 ${i % 3 !== 2 ? "border-r border-border" : ""} ${i < 3 ? "border-b border-border" : ""}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <div className={`w-2 h-2 rounded-full ${m.color}`} />
-                  <span className="text-[13px] font-semibold text-foreground">{m.name}</span>
-                  <span className={`ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded ${m.status === "Active" ? "bg-[#E8F7EB] text-[#1E7A31]" : "bg-[#F0F0F0] text-[#6F6F6F]"}`}>{m.status}</span>
+              <div key={m.id} className={`p-2.5 ${i % 3 !== 2 ? "border-r border-border" : ""} ${i < 3 ? "border-b border-border" : ""}`}>
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <div className={`w-1.5 h-1.5 rounded-full ${m.color}`} />
+                  <span className="text-[12px] font-semibold text-foreground">{m.name}</span>
+                  <span className={`ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded ${m.status === "Active" ? "bg-[#E8F7EB] text-[#1E7A31]" : "bg-[#F0F0F0] text-[#6F6F6F]"}`}>{m.status}</span>
                 </div>
-                <p className="text-[11px] text-muted-foreground leading-snug">{m.description}</p>
+                <p className="text-[10px] text-muted-foreground leading-snug">{m.description}</p>
               </div>
             ))}
           </div>
@@ -505,34 +503,34 @@ function IntegrationsScreen() {
         </div>
 
         {/* Integration cards */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           {visible.map(int => (
-            <div key={int.id} className={`bg-card border rounded-lg p-5 hover:shadow-sm transition-shadow ${int.health === "Degraded" ? "border-[#F5A623]/40" : "border-border"}`}>
-              <div className="flex items-start gap-4">
-                <div className={`w-10 h-10 rounded-lg ${int.iconBg} flex items-center justify-center shrink-0`}>
-                  <span className={`text-[11px] font-bold ${int.iconText}`}>{int.name.slice(0, 2).toUpperCase()}</span>
+            <div key={int.id} className={`bg-card border rounded-lg p-3.5 hover:shadow-sm transition-shadow ${int.health === "Degraded" ? "border-[#F5A623]/40" : "border-border"}`}>
+              <div className="flex items-start gap-3">
+                <div className={`w-8 h-8 rounded-md ${int.iconBg} flex items-center justify-center shrink-0`}>
+                  <span className={`text-[10px] font-bold ${int.iconText}`}>{int.name.slice(0, 2).toUpperCase()}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <span className="text-[14px] font-semibold text-foreground">{int.name}</span>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${intStatusColor(int.status)}`}>{int.status}</span>
+                    <span className="text-[13px] font-semibold text-foreground">{int.name}</span>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${intStatusColor(int.status)}`}>{int.status}</span>
                     {int.health !== "—" && (
-                      <span className={`text-[11px] font-semibold ${intHealthColor(int.health)}`}>· {int.health}</span>
+                      <span className={`text-[10px] font-semibold ${intHealthColor(int.health)}`}>· {int.health}</span>
                     )}
                   </div>
-                  <div className="text-[11px] text-muted-foreground mb-2">{int.vendor} · {int.category} · {int.direction}</div>
-                  <p className="text-[12px] text-muted-foreground mb-3 leading-snug">{int.description}</p>
+                  <div className="text-[10px] text-muted-foreground mb-1.5">{int.vendor} · {int.category} · {int.direction}</div>
+                  <p className="text-[11px] text-muted-foreground mb-2 leading-snug">{int.description}</p>
 
                   {/* Module chips */}
-                  <div className="flex flex-wrap gap-1 mb-3">
+                  <div className="flex flex-wrap gap-1 mb-2">
                     {int.modules.map(m => (
-                      <span key={m} className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#EEF2FA] text-[#2855A6]">EnTIQ {m}</span>
+                      <span key={m} className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#EEF2FA] text-[#2855A6]">EnTIQ {m}</span>
                     ))}
                   </div>
 
                   <div className="flex items-center justify-between">
                     {int.status === "Connected" && (
-                      <span className="text-[11px] text-muted-foreground">Last sync: <span className="text-foreground">{int.lastSync}</span></span>
+                      <span className="text-[10px] text-muted-foreground">Last sync: <span className="text-foreground">{int.lastSync}</span></span>
                     )}
                     {int.status !== "Connected" && <span />}
                     <div className="flex gap-2">

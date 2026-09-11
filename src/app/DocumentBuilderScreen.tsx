@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { ChevronLeft, Save, CheckCircle, Upload, Users2, Palette, Type, Image, AlignLeft, Table, PenSquare, SquarePen, Trash, X, Link, IndentIncrease } from "lucide-react";
 import { INITIAL_FEES, INITIAL_STAFF } from "./ServicesScreen";
 
@@ -13,24 +13,62 @@ const MERGE_FIELDS = [
 
 type DocSection = { id: string; type: "header" | "recipient" | "body" | "fee-table" | "staff-table" | "signature" | "footer"; label: string; content?: string };
 
-const DEFAULT_SECTIONS: DocSection[] = [
-  { id: "s1", type: "header", label: "Letterhead", content: "" },
-  { id: "s2", type: "recipient", label: "Recipient block", content: "{{client_name}}\n{{client_address}}\n\n{{today_date}}" },
-  { id: "s3", type: "body", label: "Introduction", content: "Dear {{client_name}},\n\nWe are pleased to confirm our engagement to provide the following professional services to {{entity_name}}." },
-  { id: "s4", type: "fee-table", label: "Fee table", content: "" },
-  { id: "s5", type: "body", label: "Terms & conditions", content: "Our services will be conducted in accordance with the relevant professional standards. Payment is due within 14 days of invoice. GST is applicable to all fees." },
-  { id: "s6", type: "signature", label: "Signature block", content: "" },
-  { id: "s7", type: "footer", label: "Footer", content: "" },
-];
+function getDefaultSections(templateName: string, templateType: string): DocSection[] {
+  if (templateType === "Questionnaire") {
+    return [
+      { id: "s1", type: "header", label: "Letterhead", content: "" },
+      { id: "s2", type: "recipient", label: "Recipient block", content: "Client: {{client_name}}\nEmail: {{client_email}}\nDate: {{today_date}}" },
+      { id: "s3", type: "body", label: "Instructions", content: `Please complete the following questions for your ${templateName || "compliance review"}. Accurate responses ensure timely compliance with Australian statutory requirements.` },
+      { id: "s4", type: "body", label: "Section 1: Identity & Background", content: "1. Have there been any changes to your registered contact details, residential address, or primary bank accounts over the past 12 months?\n\n2. Are you or any related entity a Politically Exposed Person (PEP) or subject to international sanctions?\n\n3. Do you hold any foreign bank accounts, offshore assets, or digital currency (crypto) exceeding AUD $50,000 in value?" },
+      { id: "s5", type: "body", label: "Section 2: Tax & Compliance", content: "4. Please specify your preferred method of record keeping (Xero, MYOB, QuickBooks, or manual spreadsheets).\n\n5. Have all prior year activity statements and tax lodgements been completed up to date?\n\n6. Are there any existing ATO payment arrangements or disputed debts that we should be aware of?" },
+      { id: "s6", type: "signature", label: "Declaration & Signature", content: "" },
+      { id: "s7", type: "footer", label: "Footer", content: "" },
+    ];
+  }
+
+  if (templateType === "Consent notice") {
+    return [
+      { id: "s1", type: "header", label: "Letterhead", content: "" },
+      { id: "s2", type: "recipient", label: "Recipient block", content: "Attention: {{client_name}}\nNotice Date: {{today_date}}" },
+      { id: "s3", type: "body", label: "Notice & Authority", content: `Privacy and Regulatory Consent Notice — ${templateName}\n\nIn accordance with the Australian Privacy Principles (APPs) established under the Privacy Act 1988 (Cth) and TPB guidelines, {{firm_name}} is required to notify you regarding the collection and handling of your personal and identity information.` },
+      { id: "s4", type: "body", label: "Purpose & Scope of Collection", content: "We collect your personal information (including Full Name, Date of Birth, TFN, Residential Address, and Government ID documents) solely to:\n• Verify your identity in accordance with Anti-Money Laundering and Counter-Terrorism Financing (AML/CTF) obligations;\n• Prepare and lodge statutory documents with the Australian Taxation Office (ATO) and ASIC;\n• Provide accounting, tax compliance, and commercial advisory services." },
+      { id: "s5", type: "body", label: "Disclosure & Data Protection", content: "Your personal information will remain strictly confidential and will not be disclosed to any third party without your consent, unless mandated by Australian law. All digital records are stored in high-security, ISO 27001-certified Australian data centres." },
+      { id: "s6", type: "signature", label: "Client Consent Signature", content: "" },
+      { id: "s7", type: "footer", label: "Footer", content: "" },
+    ];
+  }
+
+  if (templateType === "Service catalogue") {
+    return [
+      { id: "s1", type: "header", label: "Letterhead", content: "" },
+      { id: "s2", type: "body", label: "Overview", content: "{{firm_name}} Schedule of Professional Services & Standard Pricing\n\nWe provide tailored accounting, tax advisory, and compliance services to individuals, trusts, and commercial enterprises. Below are our current fixed fee packages and professional charge-out rates." },
+      { id: "s3", type: "fee-table", label: "Standard fee schedule", content: "" },
+      { id: "s4", type: "staff-table", label: "Staff charge-out rates", content: "" },
+      { id: "s5", type: "body", label: "Terms of engagement", content: "All rates and fixed fees quoted are in AUD and exclusive of GST unless explicitly stated otherwise. Project scopes beyond standard compliance are billed at the applicable hourly rates shown above." },
+      { id: "s6", type: "footer", label: "Footer", content: "" },
+    ];
+  }
+
+  // Default: Engagement letter
+  return [
+    { id: "s1", type: "header", label: "Letterhead", content: "" },
+    { id: "s2", type: "recipient", label: "Recipient block", content: "{{client_name}}\n{{client_address}}\n\n{{today_date}}" },
+    { id: "s3", type: "body", label: "Introduction", content: `Dear {{client_name}},\n\nWe are pleased to confirm our engagement to provide professional accounting and taxation services for ${templateName || "{{entity_name}}"}.` },
+    { id: "s4", type: "fee-table", label: "Fee schedule", content: "" },
+    { id: "s5", type: "body", label: "Terms & conditions", content: "Our services will be conducted in accordance with the relevant professional standards and APES 305. Payment is due within 14 days of invoice. GST is applicable to all professional fees." },
+    { id: "s6", type: "signature", label: "Signature block", content: "" },
+    { id: "s7", type: "footer", label: "Footer", content: "" },
+  ];
+}
 
 interface DocBuilderProps {
-  templateName: string;
-  templateType: string;
+  templateName?: string;
+  templateType?: string;
   onBack: () => void;
 }
 
-function DocumentBuilderScreen({ templateName, templateType, onBack }: DocBuilderProps) {
-  const [sections, setSections] = useState<DocSection[]>(DEFAULT_SECTIONS);
+function DocumentBuilderScreen({ templateName = "Untitled Template", templateType = "Engagement", onBack }: DocBuilderProps) {
+  const [sections, setSections] = useState<DocSection[]>(() => getDefaultSections(templateName, templateType));
   const [activeSection, setActiveSection] = useState<string | null>("s3");
   const [branding, setBranding] = useState({ firmName: "Grow Advisory Group", abn: "61 234 567 890", address: "Level 12, 101 Collins Street, Melbourne VIC 3000", phone: "(03) 9000 1234", email: "hello@growadvisory.com.au", website: "www.growadvisory.com.au", primaryColor: "#2855A6", secondaryColor: "#20BCA4", logoUploaded: false });
   const [leftPanel, setLeftPanel] = useState<"branding" | "fields" | "sections">("branding");
@@ -70,7 +108,7 @@ function DocumentBuilderScreen({ templateName, templateType, onBack }: DocBuilde
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#F5F7FA]">
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#F5F7FA]">
       {/* Top bar */}
       <div className="h-[52px] min-h-[52px] bg-card border-b border-border flex items-center px-4 gap-4">
         <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
@@ -118,7 +156,7 @@ function DocumentBuilderScreen({ templateName, templateType, onBack }: DocBuilde
                 {/* Logo upload */}
                 <div>
                   <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Logo</label>
-                  <div className={`border-2 border-dashed rounded-lg p-4 flex flex-col items-center gap-2 cursor-pointer transition-colors ${branding.logoUploaded ? "border-[#2EA843] bg-[#E8F7EB]/30" : "border-border hover:border-[#2855A6]/40 hover:bg-[#EEF2FA]/20"}`}
+                  <div className={`border-2 border-dashed rounded-lg p-2.5 flex flex-col items-center gap-1.5 cursor-pointer transition-colors ${branding.logoUploaded ? "border-[#2EA843] bg-[#E8F7EB]/30" : "border-border hover:border-[#2855A6]/40 hover:bg-[#EEF2FA]/20"}`}
                     onClick={() => setBranding(b => ({ ...b, logoUploaded: !b.logoUploaded }))}>
                     {branding.logoUploaded ? (
                       <>
@@ -391,12 +429,12 @@ function DocumentBuilderScreen({ templateName, templateType, onBack }: DocBuilde
                     className="w-full px-2.5 py-1.5 text-[12px] bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-1 focus:ring-[#2855A6]/20 focus:border-[#2855A6]" />
                 </div>
                 {activeS.type === "body" && (
-                  <div className="p-3 rounded-lg bg-[#EEF2FA]/60 border border-[#2855A6]/15 text-[11px] text-[#2855A6]">
+                  <div className="p-2 rounded-md bg-[#EEF2FA]/60 border border-[#2855A6]/15 text-[10px] text-[#2855A6] leading-snug">
                     Click the section on the canvas to edit text inline. Use the Fields panel to insert merge variables.
                   </div>
                 )}
                 {(activeS.type === "fee-table" || activeS.type === "staff-table") && (
-                  <div className="p-3 rounded-lg bg-[#E3F8F5]/60 border border-[#20BCA4]/20 text-[11px] text-[#20BCA4]">
+                  <div className="p-2 rounded-md bg-[#E3F8F5]/60 border border-[#20BCA4]/20 text-[10px] text-[#20BCA4] leading-snug">
                     This table auto-populates from your <strong>Services & Pricing</strong> settings.
                   </div>
                 )}

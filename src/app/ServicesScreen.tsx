@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Trash, DollarSign, Users2, Package } from "lucide-react";
 import { PageShell } from "./shared";
+import { services as servicesApi } from "../lib/api";
 
 // ─── Services & Pricing screen ───────────────────────────────────────────────
 
@@ -65,6 +66,23 @@ function ServicesScreen() {
   const inputCls = "w-full px-3 py-2 text-[13px] bg-[#F5F5F5] border border-border rounded focus:outline-none focus:ring-2 focus:ring-[#2855A6]/20 focus:border-[#2855A6] transition-all";
   const selectCls = inputCls + " appearance-none cursor-pointer";
 
+  useEffect(() => {
+    let mounted = true;
+    servicesApi.listServices().then(res => {
+      if (mounted && res?.length) setServices(res);
+    }).catch(console.error);
+
+    servicesApi.listFees().then(res => {
+      if (mounted && res?.length) setFees(res);
+    }).catch(console.error);
+
+    servicesApi.listStaff().then(res => {
+      if (mounted && res?.length) setStaff(res);
+    }).catch(console.error);
+
+    return () => { mounted = false; };
+  }, []);
+
   return (
     <PageShell
       title="Services & Pricing"
@@ -108,8 +126,8 @@ function ServicesScreen() {
       {tab === "services" && (
         <>
           {showNewService && (
-            <div className="bg-card border border-[#2855A6]/30 rounded-xl p-5 space-y-4 shadow-sm">
-              <h3 className="text-[14px] font-bold text-foreground">New service</h3>
+            <div className="bg-card border border-[#2855A6]/30 rounded-lg p-3.5 space-y-3 shadow-sm">
+              <h3 className="text-[13px] font-bold text-foreground">New service</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[12px] font-semibold mb-1.5">Service name *</label>
@@ -140,7 +158,9 @@ function ServicesScreen() {
                 <button
                   disabled={!newSvc.name.trim()}
                   onClick={() => {
-                    setServices(prev => [...prev, { id: `SVC-${String(prev.length + 1).padStart(3, "0")}`, name: newSvc.name.trim(), description: newSvc.description, entityTypes: newSvc.entityTypes, scope: newSvc.scope, status: "Active" }]);
+                    const item = { id: `SVC-${String(services.length + 1).padStart(3, "0")}`, name: newSvc.name.trim(), description: newSvc.description, entityTypes: newSvc.entityTypes, scope: newSvc.scope, status: "Active" };
+                    setServices(prev => [...prev, item]);
+                    servicesApi.createService(item).catch(err => console.error("Failed to create service in DB", err));
                     setShowNewService(false); setNewSvc({ name: "", description: "", entityTypes: [], scope: "" });
                   }}
                   className="px-5 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] transition-colors disabled:opacity-40">
@@ -184,7 +204,11 @@ function ServicesScreen() {
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex gap-1">
-                          <button onClick={() => { setServices(prev => prev.map(x => x.id === s.id ? editSvc! : x)); setEditingSvcId(null); setEditSvc(null); }} className="px-2.5 py-1 bg-[#2855A6] text-white text-[11px] font-semibold rounded hover:bg-[#1F4491] transition-colors">Save</button>
+                          <button onClick={() => {
+                            setServices(prev => prev.map(x => x.id === s.id ? editSvc! : x));
+                            servicesApi.updateService(s.id, editSvc!).catch(err => console.error("Failed to update service in DB", err));
+                            setEditingSvcId(null); setEditSvc(null);
+                          }} className="px-2.5 py-1 bg-[#2855A6] text-white text-[11px] font-semibold rounded hover:bg-[#1F4491] transition-colors">Save</button>
                           <button onClick={() => { setEditingSvcId(null); setEditSvc(null); }} className="px-2.5 py-1 border border-border text-[11px] text-muted-foreground rounded hover:bg-muted transition-colors">Cancel</button>
                         </div>
                       </td>
@@ -204,7 +228,10 @@ function ServicesScreen() {
                       <td className="px-4 py-3">
                         <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                           <button onClick={() => { setEditingSvcId(s.id); setEditSvc({ ...s }); }} className="p-1 rounded text-muted-foreground hover:text-[#2855A6] hover:bg-[#EEF2FA] transition-colors text-[11px] font-semibold px-2">Edit</button>
-                          <button onClick={() => setServices(prev => prev.filter(x => x.id !== s.id))} className="p-1 rounded text-muted-foreground hover:text-[#D0021B] hover:bg-[#FCE8EB] transition-colors"><Trash size={13} /></button>
+                          <button onClick={() => {
+                            setServices(prev => prev.filter(x => x.id !== s.id));
+                            servicesApi.deleteService(s.id).catch(err => console.error("Failed to delete service in DB", err));
+                          }} className="p-1 rounded text-muted-foreground hover:text-[#D0021B] hover:bg-[#FCE8EB] transition-colors"><Trash size={13} /></button>
                         </div>
                       </td>
                     </tr>
@@ -220,8 +247,8 @@ function ServicesScreen() {
       {tab === "fees" && (
         <>
           {showNewFee && (
-            <div className="bg-card border border-[#2855A6]/30 rounded-xl p-5 space-y-4 shadow-sm">
-              <h3 className="text-[14px] font-bold text-foreground">New fee entry</h3>
+            <div className="bg-card border border-[#2855A6]/30 rounded-lg p-3.5 space-y-3 shadow-sm">
+              <h3 className="text-[13px] font-bold text-foreground">New fee entry</h3>
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-1">
                   <label className="block text-[12px] font-semibold mb-1.5">Service *</label>
@@ -266,7 +293,9 @@ function ServicesScreen() {
                 <button
                   disabled={!newFee.amount}
                   onClick={() => {
-                    setFees(prev => [...prev, { id: `FEE-${String(prev.length + 1).padStart(3, "0")}`, service: newFee.service, basis: newFee.basis, amount: Number(newFee.amount), frequency: newFee.frequency, gst: newFee.gst, notes: newFee.notes }]);
+                    const item = { id: `FEE-${String(fees.length + 1).padStart(3, "0")}`, service: newFee.service, basis: newFee.basis, amount: Number(newFee.amount), frequency: newFee.frequency, gst: newFee.gst, notes: newFee.notes };
+                    setFees(prev => [...prev, item]);
+                    servicesApi.createFee(item).catch(err => console.error("Failed to create fee in DB", err));
                     setShowNewFee(false); setNewFee({ service: services[0]?.name ?? "", basis: "Fixed", amount: "", frequency: "Annual", gst: true, notes: "" });
                   }}
                   className="px-5 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] transition-colors disabled:opacity-40">
@@ -320,7 +349,11 @@ function ServicesScreen() {
                       <td className="px-4 py-2"><input value={editFee.notes} onChange={e => setEditFee(p => p && ({ ...p, notes: e.target.value }))} placeholder="Notes…" className={inputCls} /></td>
                       <td className="px-4 py-2">
                         <div className="flex gap-1">
-                          <button onClick={() => { setFees(prev => prev.map(x => x.id === f.id ? editFee! : x)); setEditingFeeId(null); setEditFee(null); }} className="px-2.5 py-1 bg-[#2855A6] text-white text-[11px] font-semibold rounded hover:bg-[#1F4491] transition-colors">Save</button>
+                          <button onClick={() => {
+                            setFees(prev => prev.map(x => x.id === f.id ? editFee! : x));
+                            servicesApi.updateFee(f.id, editFee!).catch(err => console.error("Failed to update fee in DB", err));
+                            setEditingFeeId(null); setEditFee(null);
+                          }} className="px-2.5 py-1 bg-[#2855A6] text-white text-[11px] font-semibold rounded hover:bg-[#1F4491] transition-colors">Save</button>
                           <button onClick={() => { setEditingFeeId(null); setEditFee(null); }} className="px-2.5 py-1 border border-border text-[11px] text-muted-foreground rounded hover:bg-muted transition-colors">Cancel</button>
                         </div>
                       </td>
@@ -337,7 +370,10 @@ function ServicesScreen() {
                       <td className="px-4 py-3 text-muted-foreground">{f.frequency}</td>
                       <td className="px-4 py-3 text-muted-foreground text-[11px]">{f.notes || "—"}</td>
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setFees(prev => prev.filter(x => x.id !== f.id))} className="p-1 rounded text-muted-foreground hover:text-[#D0021B] hover:bg-[#FCE8EB] transition-colors"><Trash size={13} /></button>
+                        <button onClick={() => {
+                          setFees(prev => prev.filter(x => x.id !== f.id));
+                          servicesApi.deleteFee(f.id).catch(err => console.error("Failed to delete fee in DB", err));
+                        }} className="p-1 rounded text-muted-foreground hover:text-[#D0021B] hover:bg-[#FCE8EB] transition-colors"><Trash size={13} /></button>
                       </td>
                     </tr>
                   )
@@ -356,8 +392,8 @@ function ServicesScreen() {
       {tab === "staff" && (
         <>
           {showNewStaff && (
-            <div className="bg-card border border-[#2855A6]/30 rounded-xl p-5 space-y-4 shadow-sm">
-              <h3 className="text-[14px] font-bold text-foreground">New staff member</h3>
+            <div className="bg-card border border-[#2855A6]/30 rounded-lg p-3.5 space-y-3 shadow-sm">
+              <h3 className="text-[13px] font-bold text-foreground">New staff member</h3>
               <div className="grid grid-cols-4 gap-4">
                 <div>
                   <label className="block text-[12px] font-semibold mb-1.5">Full name *</label>
@@ -386,7 +422,9 @@ function ServicesScreen() {
                 <button
                   disabled={!newStaff.name.trim()}
                   onClick={() => {
-                    setStaff(prev => [...prev, { id: `STF-${String(prev.length + 1).padStart(3, "0")}`, name: newStaff.name.trim(), role: newStaff.role, rate: Number(newStaff.rate) || 0, currency: "AUD", unit: "hour", email: newStaff.email, status: "Active" }]);
+                    const item = { id: `STF-${String(staff.length + 1).padStart(3, "0")}`, name: newStaff.name.trim(), role: newStaff.role, rate: Number(newStaff.rate) || 0, currency: "AUD", unit: "hour", email: newStaff.email, status: "Active" };
+                    setStaff(prev => [...prev, item]);
+                    servicesApi.createStaff(item).catch(err => console.error("Failed to create staff in DB", err));
                     setShowNewStaff(false); setNewStaff({ name: "", role: "Accountant", rate: "", email: "" });
                   }}
                   className="px-5 py-2 bg-[#2855A6] text-white text-[13px] font-semibold rounded hover:bg-[#1F4491] transition-colors disabled:opacity-40">
@@ -430,7 +468,11 @@ function ServicesScreen() {
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex gap-1">
-                          <button onClick={() => { setStaff(prev => prev.map(x => x.id === s.id ? editStaff! : x)); setEditingStaffId(null); setEditStaff(null); }} className="px-2.5 py-1 bg-[#2855A6] text-white text-[11px] font-semibold rounded hover:bg-[#1F4491] transition-colors">Save</button>
+                          <button onClick={() => {
+                            setStaff(prev => prev.map(x => x.id === s.id ? editStaff! : x));
+                            servicesApi.updateStaff(s.id, editStaff!).catch(err => console.error("Failed to update staff in DB", err));
+                            setEditingStaffId(null); setEditStaff(null);
+                          }} className="px-2.5 py-1 bg-[#2855A6] text-white text-[11px] font-semibold rounded hover:bg-[#1F4491] transition-colors">Save</button>
                           <button onClick={() => { setEditingStaffId(null); setEditStaff(null); }} className="px-2.5 py-1 border border-border text-[11px] text-muted-foreground rounded hover:bg-muted transition-colors">Cancel</button>
                         </div>
                       </td>
@@ -449,7 +491,10 @@ function ServicesScreen() {
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <div className="flex gap-1">
                           <button onClick={() => { setEditingStaffId(s.id); setEditStaff({ ...s }); }} className="p-1 rounded text-muted-foreground hover:text-[#2855A6] hover:bg-[#EEF2FA] transition-colors text-[11px] font-semibold px-2">Edit</button>
-                          <button onClick={() => setStaff(prev => prev.filter(x => x.id !== s.id))} className="p-1 rounded text-muted-foreground hover:text-[#D0021B] hover:bg-[#FCE8EB] transition-colors"><Trash size={13} /></button>
+                          <button onClick={() => {
+                            setStaff(prev => prev.filter(x => x.id !== s.id));
+                            servicesApi.deleteStaff(s.id).catch(err => console.error("Failed to delete staff in DB", err));
+                          }} className="p-1 rounded text-muted-foreground hover:text-[#D0021B] hover:bg-[#FCE8EB] transition-colors"><Trash size={13} /></button>
                         </div>
                       </td>
                     </tr>

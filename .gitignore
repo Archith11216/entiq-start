@@ -1,4 +1,4 @@
-﻿# Logs
+# Logs
 logs
 *.log
 npm-debug.log*
@@ -36,3 +36,14 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+
+# Python & SQLite
+__pycache__/
+*.py[cod]
+*$py.class
+*.db
+*.sqlite
+*.sqlite3
+.pytest_cache/
+.venv/
+venv/
